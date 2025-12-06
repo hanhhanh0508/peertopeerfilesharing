@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.p2papp.filesharing.controller.LoginController"
+            stylesheets="@/com/p2papp/filesharing/css/style.css">
+
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true"
+                    hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                    style="-fx-background: transparent;" 
+                    styleClass="scroll-pane">
+            <content>
+                <VBox alignment="CENTER" spacing="25" minHeight="0">
+
+                    <VBox alignment="CENTER" spacing="20" styleClass="card" maxWidth="400">
+
+                        <!-- Logo -->
+                        <Label text="📁" style="-fx-font-size: 60px;"/>
+
+                        <!-- Titles -->
+                        <VBox alignment="CENTER" spacing="5">
+                            <Label text="P2P FILE SHARING" styleClass="title-label"/>
+                            <Label text="Secure. Fast. Decentralized." styleClass="subtitle-label"/>
+                        </VBox>
+
+                        <!-- Form -->
+                        <VBox spacing="15">
+
+                            <VBox spacing="8">
+                                <Label text="Username" styleClass="subtitle-label"/>
+                                <TextField fx:id="txtUsername" promptText="Enter username" styleClass="input-field"/>
+                            </VBox>
+
+                            <VBox spacing="8">
+                                <Label text="Password" styleClass="subtitle-label"/>
+                                <PasswordField fx:id="txtPassword" promptText="Enter password" styleClass="input-field"/>
+                            </VBox>
+
+                            <Label fx:id="lblError" text="" styleClass="error-label" visible="false"/>
+
+                            <VBox spacing="10">
+                                <Button fx:id="btnLogin" text="Login" onAction="#handleLogin" styleClass="button-login"/>
+                                <Button fx:id="btnRegister" text="Create Account" onAction="#handleRegister" styleClass="button-register"/>
+                            </VBox>
+
+                        </VBox>
+
+                    </VBox>
+
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+</BorderPane>

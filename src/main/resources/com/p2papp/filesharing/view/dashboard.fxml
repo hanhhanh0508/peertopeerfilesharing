@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.p2papp.filesharing.controller.DashboardController"
+            prefWidth="1000" prefHeight="700">
+    
+    <!-- Top Bar -->
+    <top>
+        <HBox spacing="10" style="-fx-background-color: #2196F3; -fx-padding: 15;">
+            <Label fx:id="lblUsername" text="Welcome, User!" 
+                   style="-fx-text-fill: white; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+            
+            <Region HBox.hgrow="ALWAYS"/>
+            
+            <Label fx:id="lblStatus" text="🟢 Online" 
+                   style="-fx-text-fill: white; -fx-font-size: 14px;"/>
+            
+            <Button fx:id="btnLogout" text="Logout" onAction="#handleLogout"
+                    style="-fx-background-color: #f44336; -fx-text-fill: white;"/>
+        </HBox>
+    </top>
+    
+    <!-- Center - TabPane -->
+    <center>
+        <TabPane tabClosingPolicy="UNAVAILABLE">
+            
+            <!-- Tab 1: My Files -->
+            <Tab fx:id="tabMyFiles" text="My Files">
+                <VBox spacing="10" style="-fx-padding: 10;">
+                    
+                    <!-- Buttons -->
+                    <HBox spacing="10">
+                        <Button fx:id="btnUpload" text="Upload File" onAction="#handleUpload"
+                                style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+                        <Button fx:id="btnDeleteFile" text="Delete" onAction="#handleDeleteFile"
+                                style="-fx-background-color: #f44336; -fx-text-fill: white;"/>
+                    </HBox>
+                    
+                    <!-- Table -->
+                    <TableView fx:id="tblMyFiles" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn fx:id="colMyFileId" text="ID"/>
+                            <TableColumn fx:id="colMyFileName" text="File Name"/>
+                            <TableColumn fx:id="colMyFileSize" text="Size"/>
+                            <TableColumn fx:id="colSharedDate" text="Shared Date"/>
+                        </columns>
+                    </TableView>
+                    
+                </VBox>
+            </Tab>
+            
+            <!-- Tab 2: All Files -->
+            <Tab fx:id="tabAllFiles" text="All Files">
+                <VBox spacing="10" style="-fx-padding: 10;">
+                    
+                    <!-- Search -->
+                    <HBox spacing="10">
+                        <TextField fx:id="txtSearch" promptText="Search files..." HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="btnSearch" text="Search" onAction="#handleSearch"
+                                style="-fx-background-color: #2196F3; -fx-text-fill: white;"/>
+                        <Button fx:id="btnDownload" text="Download" onAction="#handleDownload"
+                                style="-fx-background-color: #4CAF50; -fx-text-fill: white;"/>
+                    </HBox>
+                    
+                    <!-- Table -->
+                    <TableView fx:id="tblAllFiles" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn fx:id="colAllFileName" text="File Name"/>
+                            <TableColumn fx:id="colAllFileSize" text="Size"/>
+                            <TableColumn fx:id="colOwner" text="Owner"/>
+                            <TableColumn fx:id="colAllSharedDate" text="Shared Date"/>
+                        </columns>
+                    </TableView>
+                    
+                </VBox>
+            </Tab>
+            
+            <!-- Tab 3: Peers -->
+            <Tab fx:id="tabPeers" text="Peers">
+                <VBox spacing="10" style="-fx-padding: 10;">
+                    
+                    <!-- Buttons -->
+                    <HBox spacing="10">
+                        <Button fx:id="btnRefreshPeers" text="Refresh" onAction="#handleRefreshPeers"
+                                style="-fx-background-color: #2196F3; -fx-text-fill: white;"/>
+                        <Button fx:id="btnDiscoverPeers" text="Discover Peers" onAction="#handleDiscoverPeers"
+                                style="-fx-background-color: #FF9800; -fx-text-fill: white;"/>
+                    </HBox>
+                    
+                    <!-- Table -->
+                    <TableView fx:id="tblPeers" VBox.vgrow="ALWAYS">
+                        <columns>
+                            <TableColumn fx:id="colPeerName" text="Username"/>
+                            <TableColumn fx:id="colPeerAddress" text="Address"/>
+                            <TableColumn fx:id="colPeerStatus" text="Status"/>
+                        </columns>
+                    </TableView>
+                    
+                </VBox>
+            </Tab>
+            
+        </TabPane>
+    </center>
+    
+</BorderPane>
