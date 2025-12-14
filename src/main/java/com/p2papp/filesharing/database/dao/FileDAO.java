@@ -15,6 +15,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+import java.text.Normalizer;
+
 
 /**
  * FileDAO.java - Data Access Object cho bảng files
@@ -118,15 +120,16 @@ public class FileDAO {
         return files;
     }
     */
-   public List<FileInfo> getFilesByUser(int userId) {
+ public List<FileInfo> getFilesByUser(int userId) {
     List<FileInfo> files = new ArrayList<>();
 
-    String sql = "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
-                 "f.file_path, f.shared_date, u.username " + // DÙNG "username" từ JOIN
-                 "FROM files f " +
-                 "JOIN users u ON f.user_id = u.user_id " +
-                 "WHERE f.user_id = ? " +
-                 "ORDER BY f.shared_date DESC";
+    String sql =
+        "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
+        "       f.file_path, f.shared_date, u.username AS owner_name " +  // alias rõ ràng
+        "FROM files f " +
+        "JOIN users u ON f.user_id = u.user_id " +
+        "WHERE f.user_id = ? " +
+        "ORDER BY f.shared_date DESC";
 
     try (Connection conn = DatabaseConnection.getConnection();
          PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -134,7 +137,9 @@ public class FileDAO {
         pstmt.setInt(1, userId);
 
         try (ResultSet rs = pstmt.executeQuery()) {
+
             while (rs.next()) {
+
                 FileInfo file = new FileInfo();
                 file.setFileId(rs.getInt("file_id"));
                 file.setUserId(rs.getInt("user_id"));
@@ -143,16 +148,20 @@ public class FileDAO {
                 file.setFileHash(rs.getString("file_hash"));
                 file.setFilePath(rs.getString("file_path"));
                 file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("username")); // Gọi đúng cột
+
+                // tránh lỗi nếu cột trống
+                file.setOwnerUsername(rs.getString("owner_name") != null
+                                      ? rs.getString("owner_name")
+                                      : "Unknown");
 
                 files.add(file);
             }
         }
 
-        System.out.println("✅ Found " + files.size() + " files for user " + userId);
+        System.out.println("📁 Loaded " + files.size() + " file(s) from user_id=" + userId);
 
     } catch (SQLException e) {
-        System.err.println("❌ Get files by user error: " + e.getMessage());
+        System.err.println("❌ ERROR getFilesByUser(): " + e.getMessage());
         e.printStackTrace();
     }
 
@@ -239,18 +248,21 @@ public class FileDAO {
         return files;
     }
     */
- public List<FileInfo> getAllSharedFiles() {
+public List<FileInfo> getAllSharedFiles() {
     List<FileInfo> files = new ArrayList<>();
 
-    String sql = "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
-                 "f.file_path, f.shared_date, u.username " + // DÙNG "username" từ JOIN
-                 "FROM files f " +
-                 "JOIN users u ON f.user_id = u.user_id " +
-                 "ORDER BY f.shared_date DESC";
+    String sql =
+        "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
+        "       f.file_path, f.shared_date, u.username, p.ip_address, p.port " +
+        "FROM files f " +
+        "JOIN users u ON f.user_id = u.user_id " +
+        "JOIN peers p ON p.user_id = u.user_id " +
+        "WHERE p.status = 'online' " +       // 🔥 CHỈ LẤY PEER ONLINE
+        "ORDER BY f.shared_date DESC";
 
     try (Connection conn = DatabaseConnection.getConnection();
-         Statement stmt = conn.createStatement();
-         ResultSet rs = stmt.executeQuery(sql)) {
+         PreparedStatement stmt = conn.prepareStatement(sql);
+         ResultSet rs = stmt.executeQuery()) {
 
         while (rs.next()) {
             FileInfo file = new FileInfo();
@@ -261,12 +273,16 @@ public class FileDAO {
             file.setFileHash(rs.getString("file_hash"));
             file.setFilePath(rs.getString("file_path"));
             file.setSharedDate(rs.getTimestamp("shared_date"));
-            file.setOwnerUsername(rs.getString("username")); // Gọi đúng cột
+            file.setOwnerUsername(rs.getString("username"));
+
+            // 🔥 Cần thêm vào FileInfo để hỗ trợ download P2P
+          //  file.setPeerIp(rs.getString("ip_address"));
+          //  file.setPeerPort(rs.getInt("port"));
 
             files.add(file);
         }
 
-        System.out.println("✅ Found " + files.size() + " shared files");
+        System.out.println("🌍 Found " + files.size() + " shared files from ONLINE peers");
 
     } catch (SQLException e) {
         System.err.println("❌ Get all files error: " + e.getMessage());
@@ -312,40 +328,51 @@ public class FileDAO {
         
         return null;
     }
+     private String removeAccent(String s) {
+        if (s == null) return null;
+        String temp = Normalizer.normalize(s, Normalizer.Form.NFD);
+        return temp.replaceAll("\\p{M}", "");
+    }
+
     /**
  * Lấy thông tin file theo đúng tên file (exact match)
  */
 public FileInfo getFileByName(String fileName) {
-    String sql = "SELECT f.*, u.username AS owner_username " +
-                 "FROM files f " +
-                 "JOIN users u ON f.user_id = u.user_id " +
-                 "WHERE f.file_name = ? LIMIT 1";
+        if (fileName == null || fileName.isEmpty()) return null;
 
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        String sql = "SELECT f.*, u.username AS owner_username " +
+                     "FROM files f " +
+                     "JOIN users u ON f.user_id = u.user_id " +
+                     "WHERE REPLACE(LOWER(f.file_name), ' ', '') = ? LIMIT 1";
 
-        pstmt.setString(1, fileName);
-        ResultSet rs = pstmt.executeQuery();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-        if (rs.next()) {
-            FileInfo file = new FileInfo();
-            file.setFileId(rs.getInt("file_id"));
-            file.setUserId(rs.getInt("user_id"));
-            file.setFileName(rs.getString("file_name"));
-            file.setFileSize(rs.getLong("file_size"));
-            file.setFileHash(rs.getString("file_hash"));
-            file.setFilePath(rs.getString("file_path"));
-            file.setSharedDate(rs.getTimestamp("shared_date"));
-            file.setOwnerUsername(rs.getString("owner_username"));
-            return file;
+            // Chuẩn hóa tên file client gửi: bỏ dấu, lowercase, bỏ khoảng trắng
+            String normalizedName = removeAccent(fileName).toLowerCase().replace(" ", "");
+            pstmt.setString(1, normalizedName);
+
+            ResultSet rs = pstmt.executeQuery();
+
+            if (rs.next()) {
+                FileInfo file = new FileInfo();
+                file.setFileId(rs.getInt("file_id"));
+                file.setUserId(rs.getInt("user_id"));
+                file.setFileName(rs.getString("file_name"));
+                file.setFileSize(rs.getLong("file_size"));
+                file.setFileHash(rs.getString("file_hash"));
+                file.setFilePath(rs.getString("file_path"));
+                file.setSharedDate(rs.getTimestamp("shared_date"));
+                file.setOwnerUsername(rs.getString("owner_username"));
+                return file;
+            }
+
+        } catch (SQLException e) {
+            System.err.println("❌ Get file by name error: " + e.getMessage());
         }
 
-    } catch (SQLException e) {
-        System.err.println("❌ Get file by name error: " + e.getMessage());
+        return null;
     }
-
-    return null;
-}
 public List<FileInfo> getFilesByName(String fileName) {
     List<FileInfo> files = new ArrayList<>();
 

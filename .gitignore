@@ -1,0 +1,15 @@
+# ===== Maven =====
+target/
+
+# ===== NetBeans =====
+nbproject/private/
+build/
+dist/
+
+# ===== IDE =====
+.idea/
+.vscode/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

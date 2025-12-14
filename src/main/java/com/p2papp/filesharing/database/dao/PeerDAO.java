@@ -84,20 +84,20 @@ public class PeerDAO {
      * 
      * @return List<Peer> danh sách peers đang online
      */
-    public List<Peer> getOnlinePeers() {
-        List<Peer> peers = new ArrayList<>();
+   public List<Peer> getOnlinePeers() {
+    List<Peer> peers = new ArrayList<>();
+    
+    String sql = "SELECT p.*, u.username " +
+                 "FROM peers p " +
+                 "JOIN users u ON p.user_id = u.user_id " +
+                 "WHERE p.status = ? " +
+                 "ORDER BY p.last_seen DESC";
+    
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement ps = conn.prepareStatement(sql)) {
         
-        // SQL với JOIN
-        String sql = "SELECT p.*, u.username " +
-                     "FROM peers p " +
-                     "JOIN users u ON p.user_id = u.user_id " +
-                     "WHERE p.status = 'online' " +
-                     "ORDER BY p.last_seen DESC";
-        
-        try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
+        ps.setString(1, "online");
+        try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 Peer peer = new Peer();
                 peer.setPeerId(rs.getInt("peer_id"));
@@ -106,20 +106,22 @@ public class PeerDAO {
                 peer.setPort(rs.getInt("port"));
                 peer.setStatus(rs.getString("status"));
                 peer.setLastSeen(rs.getTimestamp("last_seen"));
-                peer.setUsername(rs.getString("username")); // Từ JOIN
+                peer.setUsername(rs.getString("username"));
                 
                 peers.add(peer);
             }
-            
-            System.out.println("✅ Found " + peers.size() + " online peers");
-            
-        } catch (SQLException e) {
-            System.err.println("❌ Get online peers error: " + e.getMessage());
-            e.printStackTrace();
         }
         
-        return peers;
+        System.out.println("✅ Found " + peers.size() + " online peers");
+        
+    } catch (SQLException e) {
+        System.err.println("❌ Get online peers error: " + e.getMessage());
+        e.printStackTrace();
     }
+    
+    return peers;
+}
+
     
     /**
      * Lấy tất cả peers (online + offline)

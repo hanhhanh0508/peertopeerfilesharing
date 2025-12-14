@@ -24,7 +24,8 @@ public class FileInfo {
     private String fileHash;      // Hash SHA-256 của file
     private String filePath;      // Đường dẫn file trên máy
     private Timestamp sharedDate; // Ngày chia sẻ
-    
+    private String peerIp;   // IP của peer lưu file
+    private int peerPort;    // Port của peer
     // Thông tin bổ sung
     private String ownerUsername; // Username của người chia sẻ
     
@@ -52,7 +53,21 @@ public class FileInfo {
     // ============================================
     // GETTERS & SETTERS
     // ============================================
-    
+    public String getPeerIp() {
+    return peerIp;
+    }
+
+    public void setPeerIp(String peerIp) {
+    this.peerIp = peerIp;
+    }
+
+    public int getPeerPort() {
+    return peerPort;
+    }
+
+    public void setPeerPort(int peerPort) {
+    this.peerPort = peerPort;
+    }
     public int getFileId() {
         return fileId;
     }
@@ -169,6 +184,7 @@ public class FileInfo {
                 ", size=" + getFormattedFileSize() +
                 ", owner='" + ownerUsername + '\'' +
                 ", sharedDate=" + sharedDate +
+                ", peer=" + (peerIp != null ? (peerIp + ":" + peerPort) : "n/a") +
                 '}';
     }
     

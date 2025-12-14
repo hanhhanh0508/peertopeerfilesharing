@@ -258,19 +258,21 @@ private void loadMyFiles() {
 private void loadAllFiles() {
     executor.submit(() -> {
         try {
-            var files = fileDAO.getAllSharedFiles();
+            var files = fileDAO.getAllSharedFiles(); // 🔥 giờ đã chỉ lấy online peer
             Platform.runLater(() -> {
                 allFilesList.clear();
                 allFilesList.addAll(files);
             });
+
         } catch (Exception e) {
             e.printStackTrace();
-            Platform.runLater(() -> 
-                showError("Error loading all shared files: " + e.getMessage())
+            Platform.runLater(() ->
+                showError("Error loading shared files: " + e.getMessage())
             );
         }
     });
 }
+
 
 private void loadPeers() {
     executor.submit(() -> {
@@ -413,46 +415,56 @@ private void handleSearch() {
     }).start();
 }
 
-  
 @FXML
 private void handleDownload() {
     FileInfo selected = tblAllFiles.getSelectionModel().getSelectedItem();
-
     if (selected == null) {
         showError("Please select a file to download!");
         return;
     }
 
-    // Hộp thoại chọn nơi lưu file
-    FileChooser fileChooser = new FileChooser();
-    fileChooser.setTitle("Save File");
-    fileChooser.setInitialFileName(selected.getFileName());
-
-    File saveLocation = fileChooser.showSaveDialog(btnDownload.getScene().getWindow());
-    if (saveLocation == null) {
-        return; // user bấm Cancel
+    // Lấy peer sở hữu file
+    Peer ownerPeer = peerDAO.getPeerByUserId(selected.getUserId());
+    if (ownerPeer == null) {
+        showError("Peer not found!");
+        return;
     }
 
-    // Chạy trong Thread nền để không làm đứng UI
+    // Thư mục lưu file cho user hiện tại
+    String downloadsFolder = "storage/user_" + currentUser.getUserId() + "/downloads";
+
+    // Tạo client kết nối đến peer
+    PeerClient client = new PeerClient(ownerPeer.getIpAddress(), ownerPeer.getPort());
+
     new Thread(() -> {
         try {
-            boolean ok = fileDAO.downloadFile(selected.getFileId(), saveLocation.getAbsolutePath());
+            if (!client.connect()) {
+                javafx.application.Platform.runLater(() ->
+                        showError("Cannot connect to peer " + ownerPeer.getIpAddress()));
+                return;
+            }
 
-            Platform.runLater(() -> {
-                if (ok)
-                    showInfo("Downloaded successfully:\n" + saveLocation.getAbsolutePath());
-                else
-                    showError("Download failed!");
+            boolean ok = client.downloadFile(
+                    selected.getFileName(),
+                    downloadsFolder
+            );
+
+            javafx.application.Platform.runLater(() -> {
+                if (ok) {
+                    showInfo("Download completed → " + downloadsFolder + "/" + selected.getFileName());
+                } else {
+                    showError("Download failed (server not sending file)");
+                }
             });
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            Platform.runLater(() ->
-                showError("An error occurred while downloading!")
-            );
+            client.disconnect();
+
+        } catch (Exception ex) {
+            javafx.application.Platform.runLater(() -> showError("Error: " + ex.getMessage()));
         }
     }).start();
 }
+
 
     @FXML
     private void handleRefreshPeers() {
