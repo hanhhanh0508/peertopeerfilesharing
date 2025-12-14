@@ -2,7 +2,6 @@ package com.p2papp.filesharing.network;
 
 import com.p2papp.filesharing.database.dao.FileDAO;
 import com.p2papp.filesharing.model.FileInfo;
-import com.p2papp.filesharing.model.User;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -182,19 +181,16 @@ public class PeerServer extends Thread {
         /**
          * Xử lý message theo protocol
          */
-        private void handleMessage(String message) {
+     private void handleMessage(String message) {
             try {
-                // Validate message
                 if (message == null || message.trim().isEmpty()) {
                     sendResponse("ERROR:EMPTY_MESSAGE");
                     return;
                 }
                 
-                // Parse command
                 String[] parts = message.split(":", 2);
-                String command = parts[0];
+                String command = parts[0].trim();
                 
-                // Xử lý từng command
                 switch (command) {
                     case "PING":
                         handlePing();
@@ -207,19 +203,15 @@ public class PeerServer extends Thread {
                     case "GET_INFO":
                         handleGetInfo();
                         break;
-                    case "DOWNLOAD_REQUEST":
-                    if(parts.length > 1)
-                        handleDownloadFile(parts[1]); //parts[1] = fileName
-                    else
-                        sendResponse("ERROR:MISSING_FILENAME");
-                    break;
+                        
                     case "LIST_FILES":
                         handleListFiles();
                         break;
-                        
-                    case "REQUEST_FILE":
+                    
+                    // ✅ THỐNG NHẤT: Chỉ dùng DOWNLOAD_REQUEST
+                    case "DOWNLOAD_REQUEST":
                         if (parts.length > 1) {
-                            handleRequestFile(parts[1]);
+                            handleDownloadRequest(parts[1].trim());
                         } else {
                             sendResponse("ERROR:MISSING_FILENAME");
                         }
@@ -236,6 +228,7 @@ public class PeerServer extends Thread {
                 
             } catch (Exception e) {
                 System.err.println("   ❌ Handle message error: " + e.getMessage());
+                e.printStackTrace();
                 sendResponse("ERROR:INTERNAL_ERROR");
             }
         }
@@ -265,51 +258,53 @@ public class PeerServer extends Thread {
             String info = "INFO:Port=" + port + ",Status=Running,Files=" + countFiles();
             sendResponse(info);
         }
-     private void handleDownloadFile(String fileName){
-    try {
-        FileDAO fileDAO = new FileDAO();
-        FileInfo fileInfo = fileDAO.getFileByName(fileName);
-
-        if (fileInfo == null) {
-            sendResponse("ERROR:FILE_NOT_FOUND");
-            return;
+      /**
+         * s DOWNLOAD_REQUEST handler - Gửi file từ database
+         */
+        private void handleDownloadRequest(String fileName) {
+            try {
+                System.out.println("   📥 Download request: " + fileName);
+                
+                // Lấy thông tin file từ database
+                FileDAO fileDAO = new FileDAO();
+                FileInfo fileInfo = fileDAO.getFileByName(fileName);
+                
+                if (fileInfo == null) {
+                    System.err.println("   ❌ File not found in database: " + fileName);
+                    sendResponse("ERROR:FILE_NOT_FOUND");
+                    return;
+                }
+                
+                // Lấy file từ disk
+                File file = new File(fileInfo.getFilePath());
+                
+                if (!file.exists()) {
+                    System.err.println("   ❌ File not on disk: " + file.getAbsolutePath());
+                    sendResponse("ERROR:FILE_NOT_ON_DISK");
+                    return;
+                }
+                
+                // Gửi metadata
+                sendResponse("FILE_SIZE:" + file.length());
+                System.out.println("   📤 Sending file: " + fileName + " (" + file.length() + " bytes)");
+                
+                // Gửi binary data
+                sendBinaryFile(file);
+                
+                System.out.println("   ✅ File sent successfully: " + fileName);
+                
+            } catch (Exception e) {
+                System.err.println("   ❌ Download error: " + e.getMessage());
+                e.printStackTrace();
+                sendResponse("ERROR:SEND_FAILED");
+            }
         }
-
-        File file = new File(fileInfo.getFilePath());
-        if (!file.exists()) {
-            sendResponse("ERROR:FILE_NOT_ON_DISK");
-            return;
-        }
-
-        OutputStream rawOut = socket.getOutputStream();
-        PrintWriter textOut = new PrintWriter(rawOut, true);
-
-        // 1️⃣ Gửi metadata trước (TEXT)
-        textOut.println("FILE_OK:" + file.length());
-
-        // 2️⃣ Gửi FILE DƯỚI DẠNG BYTES (không PrintWriter nữa)
-        FileInputStream fis = new FileInputStream(file);
-        byte[] buffer = new byte[4096];
-        int read;
-
-        while ((read = fis.read(buffer)) != -1) {
-            rawOut.write(buffer, 0, read);
-        }
-        rawOut.flush();
-        fis.close();
-
-        System.out.println("📤 File sent success → " + fileName);
-
-    } catch (Exception e) {
-        sendResponse("ERROR:SEND_FAILED");
-        e.printStackTrace();
-    }
-}
+        
 
         /**
          * LIST_FILES - Danh sách file có sẵn
          */
-        private void handleListFiles() {
+     private void handleListFiles() {
             File folder = new File(sharedFolder);
             File[] files = folder.listFiles();
             
@@ -318,7 +313,6 @@ public class PeerServer extends Thread {
                 return;
             }
             
-            // Build file list
             StringBuilder fileList = new StringBuilder("FILES:");
             for (int i = 0; i < files.length; i++) {
                 if (files[i].isFile()) {
@@ -338,6 +332,7 @@ public class PeerServer extends Thread {
         /**
          * REQUEST_FILE - Gửi file cho peer
          */
+     /*
  // HANDLE REQUEST FROM ANOTHER PEER
 private void handleRequestFile(String requestedFileName) {
     System.out.println("DEBUG: requested fileName = '" + requestedFileName + "'");
@@ -374,7 +369,7 @@ private void handleRequestFile(String requestedFileName) {
         e.printStackTrace();
     }
 }
-
+*/
 // Helper: bỏ dấu tiếng Việt
 private String removeAccent(String s) {
     if (s == null) return null;
@@ -383,61 +378,38 @@ private String removeAccent(String s) {
 }
 
 // Gửi dữ liệu nhị phân
-private void sendBinaryFile(File file) throws Exception {
-    try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
-         OutputStream os = socket.getOutputStream()) {
-
-        byte[] buffer = new byte[4096];
-        int bytesRead;
-        while ((bytesRead = bis.read(buffer)) != -1) {
-            os.write(buffer, 0, bytesRead);
-        }
-
-        os.flush();
-    }
-}
-
-
-
-        
+   /**
+         * Gửi file binary qua socket
+         */
+        private void sendBinaryFile(File file) throws IOException {
+            try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
+                 BufferedOutputStream bos = new BufferedOutputStream(socket.getOutputStream())) {
+                
+                byte[] buffer = new byte[4096];
+                int bytes;
+                long totalSent = 0;
+                long fileSize = file.length();
+                
+                while ((bytes = bis.read(buffer)) != -1) {
+                    bos.write(buffer, 0, bytes);
+                    totalSent += bytes;
+                    
+                    // Progress log
+                    if (totalSent % (100 * 1024) == 0 || totalSent == fileSize) {
+                        int progress = (int) ((totalSent * 100) / fileSize);
+                        System.out.print("\r   Progress: " + progress + "%");
+                    }
+                }
+                
+                bos.flush();
+                System.out.println("\r   Progress: 100%");
+            }
+        }  
         /**
          * DISCONNECT - Ngắt kết nối
          */
         private void handleDisconnect() {
             sendResponse("BYE:Connection closed");
-        }
-        
-        // ============================================
-        // FILE TRANSFER
-        // ============================================
-        
-        /**
-         * Gửi file qua socket
-         */
-        private void sendFile(File file) throws IOException {
-            // Lấy output stream từ socket
-            OutputStream os = socket.getOutputStream();
-            
-            // Đọc file và gửi
-            try (FileInputStream fis = new FileInputStream(file)) {
-                byte[] buffer = new byte[4096]; // 4KB buffer
-                int bytesRead;
-                long totalSent = 0;
-                
-                while ((bytesRead = fis.read(buffer)) != -1) {
-                    os.write(buffer, 0, bytesRead);
-                    totalSent += bytesRead;
-                    
-                    // In progress (mỗi 100KB)
-                    if (totalSent % (100 * 1024) == 0) {
-                        int progress = (int) ((totalSent * 100) / file.length());
-                        System.out.print("\r   Progress: " + progress + "%");
-                    }
-                }
-                
-                os.flush();
-                System.out.println("\r   Progress: 100%");
-            }
         }
         
         // ============================================
@@ -447,14 +419,11 @@ private void sendBinaryFile(File file) throws Exception {
         /**
          * Gửi text response
          */
-        private void sendResponse(String response) {
+       private void sendResponse(String response) {
             out.println(response);
             System.out.println("   📤 [" + clientInfo + "] " + response);
         }
         
-        /**
-         * Đếm số file trong shared folder
-         */
         private int countFiles() {
             File folder = new File(sharedFolder);
             File[] files = folder.listFiles();
@@ -467,9 +436,6 @@ private void sendBinaryFile(File file) throws Exception {
             return count;
         }
         
-        /**
-         * Cleanup resources
-         */
         private void cleanup() {
             try {
                 if (in != null) in.close();

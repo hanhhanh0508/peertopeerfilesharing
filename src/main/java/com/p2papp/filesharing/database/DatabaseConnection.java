@@ -25,7 +25,12 @@ public class DatabaseConnection {
      * URL của MySQL database
      * Format: jdbc:mysql://[host]:[port]/[database]
      */
-    private static final String URL = "jdbc:mysql://localhost:3306/p2p_file_sharing";
+    // Trong DatabaseConnection.java
+    private static final String URL = 
+    "jdbc:mysql://localhost:3306/p2p_file_sharing" +
+    "?useUnicode=true" +
+    "&characterEncoding=UTF-8" +
+    "&serverTimezone=Asia/Ho_Chi_Minh";
     
     /**
      * Username MySQL

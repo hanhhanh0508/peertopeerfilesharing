@@ -38,19 +38,20 @@ public class UserDAO {
      * 2. INSERT vào database
      * 3. Return true nếu thành công
      */
+   // ============================================
+    // REGISTER - Hash password 1 LẦN Duy nhất
+    // ============================================
+    
     public boolean registerUser(String username, String password, String email) {
-        // SQL với PreparedStatement (chống SQL Injection)
         String sql = "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)";
         
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
-            // Set parameters
             pstmt.setString(1, username);
-            pstmt.setString(2, HashUtil.hashPassword(password)); // Hash password!
+            pstmt.setString(2, HashUtil.hashPassword(password)); // ← Hash 1 lần
             pstmt.setString(3, email);
             
-            // Execute INSERT
             int rowsAffected = pstmt.executeUpdate();
             
             if (rowsAffected > 0) {
@@ -60,9 +61,7 @@ public class UserDAO {
             
         } catch (SQLException e) {
             System.err.println("❌ Register failed: " + e.getMessage());
-            
-            // Kiểm tra lỗi duplicate
-            if (e.getErrorCode() == 1062) { // MySQL error code for duplicate
+            if (e.getErrorCode() == 1062) {
                 System.err.println("   Username or email already exists");
             }
         }
@@ -87,55 +86,69 @@ public class UserDAO {
      * 3. Nếu tìm thấy → tạo User object và return
      * 4. Cập nhật last_login
      */
-   public User login(String username, String password) {
-    String sql = "SELECT * FROM users WHERE username = ?";
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-        pstmt.setString(1, username);
-        ResultSet rs = pstmt.executeQuery();
-
-        if (rs.next()) {
-            String storedHash = rs.getString("password_hash").trim();
-            String inputHash = HashUtil.hashPassword(password).trim();
-System.out.println("Username: " + username);
-System.out.println("Password input: " + password);
-System.out.println("Input hash  : " + inputHash);
-System.out.println("Stored hash : " + storedHash);
-
-            if (!storedHash.equals(inputHash)) {
-                System.out.println("❌ Wrong password");
+ // ============================================
+    // LOGIN - So sánh TRỰC TIẾP (không hash lại!)
+    // ============================================
+    
+    /**
+     * Login user - FIXED VERSION
+     * 
+     * Flow:
+     * 1. SELECT user theo username
+     * 2. Lấy password_hash từ DB
+     * 3. Hash password input 1 lần
+     * 4. So sánh 2 hash
+     */
+    public User login(String username, String password) {
+        String sql = "SELECT * FROM users WHERE username = ?";
+        
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            
+            pstmt.setString(1, username);
+            ResultSet rs = pstmt.executeQuery();
+            
+            if (rs.next()) {
+                // Lấy hash từ DB
+                String storedHash = rs.getString("password_hash");              
+                // Hash password input
+                String inputHash = HashUtil.hashPassword(password);  
+                // So sánh 2 hash
+                if (!storedHash.equals(inputHash)) {
+                    System.out.println("❌ Wrong password for user: " + username);
+                    return null;
+                }     
+                // Tạo User object
+                User user = new User();
+                user.setUserId(rs.getInt("user_id"));
+                user.setUsername(rs.getString("username"));
+                user.setPasswordHash(storedHash);
+                user.setEmail(rs.getString("email"));
+                user.setCreatedAt(rs.getTimestamp("created_at"));
+                user.setLastLogin(rs.getTimestamp("last_login"));
+                
+                // Update last_login
+                updateLastLogin(user.getUserId());
+                
+                System.out.println("✅ Login successful: " + username);
+                return user;
+                
+            } else {
+                System.out.println("❌ Username not found: " + username);
                 return null;
             }
-
-            User user = new User();
-            user.setUserId(rs.getInt("user_id"));
-            user.setUsername(rs.getString("username"));
-            user.setPasswordHash(storedHash);
-            user.setEmail(rs.getString("email"));
-            user.setCreatedAt(rs.getTimestamp("created_at"));
-            user.setLastLogin(rs.getTimestamp("last_login"));
-
-            updateLastLogin(user.getUserId());
-
-            System.out.println("✅ Login successful: " + username);
-            return user;
-        } else {
-            System.out.println("❌ Login failed: username not found");
+            
+        } catch (SQLException e) {
+            System.err.println("❌ Login error: " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
-
-    } catch (SQLException e) {
-        e.printStackTrace();
-        return null;
     }
-}
-
     
     /**
      * Lấy user theo ID
      */
-    public User getUserById(int userId) {
+   public User getUserById(int userId) {
         String sql = "SELECT * FROM users WHERE user_id = ?";
         
         try (Connection conn = DatabaseConnection.getConnection();
@@ -165,7 +178,7 @@ System.out.println("Stored hash : " + storedHash);
     /**
      * Lấy user theo username
      */
-    public User getUserByUsername(String username) {
+   public User getUserByUsername(String username) {
         String sql = "SELECT * FROM users WHERE username = ?";
         
         try (Connection conn = DatabaseConnection.getConnection();
@@ -191,7 +204,6 @@ System.out.println("Stored hash : " + storedHash);
         
         return null;
     }
-    
     /**
      * Lấy tất cả users
      */
@@ -219,7 +231,6 @@ System.out.println("Stored hash : " + storedHash);
         
         return users;
     }
-    
     // ============================================
     // UPDATE
     // ============================================
@@ -227,6 +238,10 @@ System.out.println("Stored hash : " + storedHash);
     /**
      * Cập nhật last_login
      */
+    // ============================================
+    // HELPER METHODS (giữ nguyên)
+    // ============================================
+    
     private void updateLastLogin(int userId) {
         String sql = "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?";
         
@@ -265,7 +280,7 @@ System.out.println("Stored hash : " + storedHash);
     /**
      * Cập nhật email
      */
-    public boolean updateEmail(int userId, String newEmail) {
+   public boolean updateEmail(int userId, String newEmail) {
         String sql = "UPDATE users SET email = ? WHERE user_id = ?";
         
         try (Connection conn = DatabaseConnection.getConnection();
@@ -319,7 +334,7 @@ System.out.println("Stored hash : " + storedHash);
     /**
      * Kiểm tra username đã tồn tại chưa
      */
-    public boolean isUsernameExists(String username) {
+  public boolean isUsernameExists(String username) {
         String sql = "SELECT COUNT(*) FROM users WHERE username = ?";
         
         try (Connection conn = DatabaseConnection.getConnection();
@@ -338,6 +353,7 @@ System.out.println("Stored hash : " + storedHash);
         
         return false;
     }
+    
     
     /**
      * Kiểm tra email đã tồn tại chưa

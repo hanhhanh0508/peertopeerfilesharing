@@ -251,21 +251,21 @@ public class FileDAO {
 public List<FileInfo> getAllSharedFiles() {
     List<FileInfo> files = new ArrayList<>();
 
-    String sql =
-        "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
-        "       f.file_path, f.shared_date, u.username, p.ip_address, p.port " +
-        "FROM files f " +
-        "JOIN users u ON f.user_id = u.user_id " +
-        "JOIN peers p ON p.user_id = u.user_id " +
-        "WHERE p.status = 'online' " +       // 🔥 CHỈ LẤY PEER ONLINE
-        "ORDER BY f.shared_date DESC";
+    // ✅ FIX: Chỉ SELECT các columns CẦN THIẾT
+    String sql = "SELECT f.file_id, f.user_id, f.file_name, f.file_size, " +
+                 "f.file_hash, f.file_path, f.shared_date, u.username " +
+                 "FROM files f " +
+                 "JOIN users u ON f.user_id = u.user_id " +
+                 "ORDER BY f.shared_date DESC";
 
     try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement stmt = conn.prepareStatement(sql);
-         ResultSet rs = stmt.executeQuery()) {
+         Statement stmt = conn.createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
 
         while (rs.next()) {
             FileInfo file = new FileInfo();
+            
+            // ✅ Lấy từng column theo TÊN (safe hơn index)
             file.setFileId(rs.getInt("file_id"));
             file.setUserId(rs.getInt("user_id"));
             file.setFileName(rs.getString("file_name"));
@@ -275,14 +275,10 @@ public List<FileInfo> getAllSharedFiles() {
             file.setSharedDate(rs.getTimestamp("shared_date"));
             file.setOwnerUsername(rs.getString("username"));
 
-            // 🔥 Cần thêm vào FileInfo để hỗ trợ download P2P
-          //  file.setPeerIp(rs.getString("ip_address"));
-          //  file.setPeerPort(rs.getInt("port"));
-
             files.add(file);
         }
 
-        System.out.println("🌍 Found " + files.size() + " shared files from ONLINE peers");
+        System.out.println("✅ Found " + files.size() + " shared files");
 
     } catch (SQLException e) {
         System.err.println("❌ Get all files error: " + e.getMessage());

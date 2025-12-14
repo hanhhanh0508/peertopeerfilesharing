@@ -4,17 +4,9 @@
  */
 package com.p2papp.filesharing.network;
 
-import com.p2papp.filesharing.database.DatabaseConnection;
-import com.p2papp.filesharing.database.dao.FileDAO;
-import com.p2papp.filesharing.model.FileInfo;
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Timestamp;
+
 
 /**
  * PeerClient.java - Socket Client kết nối đến peer khác
@@ -80,7 +72,10 @@ public class PeerClient {
     public PeerClient(String peerIP, int peerPort) {
         this.peerIP = peerIP;
         this.peerPort = peerPort;
-        
+        File folder = new File(downloadFolder);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
    
     }
     
@@ -169,18 +164,16 @@ public class PeerClient {
      * @param message Message cần gửi
      * @return Response từ peer, null nếu lỗi
      */
-    public String sendMessage(String message) {
+     public String sendMessage(String message) {
         if (!isConnected) {
             System.err.println("❌ Not connected to peer!");
             return null;
         }
         
         try {
-            // Gửi message
             out.println(message);
             System.out.println("📤 Sent: " + message);
             
-            // Nhận response
             String response = in.readLine();
             System.out.println("📥 Received: " + response);
             
@@ -192,6 +185,7 @@ public class PeerClient {
             return null;
         }
     }
+    
     
     // ============================================
     // PROTOCOL COMMANDS
@@ -227,16 +221,15 @@ public class PeerClient {
      * LIST_FILES - Lấy danh sách file
      * @return Array tên file, empty array nếu không có
      */
-    public String[] getFileList() {
+   public String[] getFileList() {
         String response = sendMessage("LIST_FILES");
         
         if (response == null) {
             return new String[0];
         }
         
-        // Parse response: "FILES:file1.txt,file2.pdf"
         if (response.startsWith("FILES:")) {
-            String fileList = response.substring(6); // Bỏ "FILES:"
+            String fileList = response.substring(6);
             
             if (fileList.equals("NONE") || fileList.isEmpty()) {
                 return new String[0];
@@ -246,39 +239,6 @@ public class PeerClient {
         }
         
         return new String[0];
-    }
-    /**
-     * REQUEST_FILE_DOWNLOAD - Gửi request tải file nhưng CHƯA tải ngay
-     * Chỉ trả về thông tin file nếu tồn tại
-     * @return FileInfo -> name + size, hoặc null nếu lỗi.
-     */
-    public FileInfo requestFileDownload(String fileName){
-        if(!isConnected){
-            System.err.println(" Not connected!");
-            return null;
-        }
-        try {
-            out.println("REQUEST_FILE:" + fileName);
-            System.out.println("Sent: REQUEST_FILE:" + fileName);
-            String response = in.readLine();
-            System.out.println("Received: " + response);
-            if (response.startsWith("ERROR:")) {
-                System.err.println(" Peer error: " + response);
-                return null;
-            }
-            //Expected: FILE_INFO:name:size
-            if (!response.startsWith("FILE_INFO:")) {
-                System.err.println(" Invalid response format");
-                return null;
-            }
-            String[] parts = response.split(":");
-            String name = parts[1];
-            long size = Long.parseLong(parts[2]);
-            return new FileInfo(name,size);
-        } catch (Exception e){
-            System.err.println("Request failed: "+e.getMessage());
-            return null;
-        }
     }
     // ============================================
     // FILE DOWNLOAD
@@ -306,101 +266,85 @@ public class PeerClient {
  * @param saveDir Thư mục lưu file
  * @return true nếu download thành công
  */
-public boolean downloadFile(String fileName, String saveDir) {
-    try (Socket socket = new Socket(peerIP, peerPort);
-       PrintWriter out = new PrintWriter(
-        new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8),
-        true
-);
-
-         BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8))) {
-
-        // Gửi request file
-        out.println("REQUEST_FILE:" + fileName);
-        System.out.println("Sent REQUEST_FILE:" + fileName);
-
-        String response = in.readLine();
-        if (response == null || !response.startsWith("FILE_INFO:")) {
-            System.err.println("❌ File not found or invalid response: " + response);
+public boolean downloadFile(String fileName, String savePath) {
+        if (!isConnected) {
+            System.err.println("❌ Not connected!");
             return false;
         }
-
-        String[] meta = response.split(":");
-        long fileSize = Long.parseLong(meta[2]);
-
-        // Tạo thư mục lưu file nếu chưa tồn tại
-        File dir = new File(saveDir);
-        if (!dir.exists()) dir.mkdirs();
-
-        // Lưu file
-        File saveFile = new File(dir, fileName);
-        try (InputStream rawIn = socket.getInputStream();
-             FileOutputStream fos = new FileOutputStream(saveFile)) {
-
-            byte[] buffer = new byte[4096];
-            long received = 0;
-            int read;
-
-            while (received < fileSize && (read = rawIn.read(buffer)) != -1) {
-                fos.write(buffer, 0, read);
-                received += read;
+        
+        try {
+            System.out.println("\n📥 Downloading: " + fileName);
+            
+            out.println("DOWNLOAD_REQUEST:" + fileName);
+            System.out.println("📤 Sent: DOWNLOAD_REQUEST:" + fileName);
+            
+            String response = in.readLine();
+            System.out.println("📥 Received: " + response);
+            
+            if (response.startsWith("ERROR:")) {
+                System.err.println("❌ Server error: " + response);
+                return false;
             }
-
-            fos.flush();
+            
+            if (!response.startsWith("FILE_SIZE:")) {
+                System.err.println("❌ Invalid response: " + response);
+                return false;
+            }
+            
+            long fileSize = Long.parseLong(response.split(":")[1]);
+            
+            System.out.println("   File: " + fileName);
+            System.out.println("   Size: " + formatFileSize(fileSize));
+            
+            File outputFile = new File(savePath, fileName);
+            outputFile.getParentFile().mkdirs();
+            
+            System.out.println("   Saving to: " + outputFile.getAbsolutePath());
+            System.out.println("   Progress: 0%");
+            
+            try (FileOutputStream fos = new FileOutputStream(outputFile)) {
+                InputStream is = socket.getInputStream();
+                
+                byte[] buffer = new byte[4096];
+                long totalRead = 0;
+                int bytesRead;
+                int lastProgress = 0;
+                
+                while (totalRead < fileSize) {
+                    bytesRead = is.read(buffer);
+                    
+                    if (bytesRead == -1) {
+                        throw new IOException("Unexpected end of stream");
+                    }
+                    
+                    fos.write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                    
+                    int progress = (int) ((totalRead * 100) / fileSize);
+                    if (progress != lastProgress && progress % 10 == 0) {
+                        System.out.print("\r   Progress: " + progress + "%");
+                        lastProgress = progress;
+                    }
+                }
+                
+                System.out.print("\r   Progress: 100%\n");
+            }
+            
+            System.out.println("✅ Download completed: " + outputFile.getName());
+            System.out.println("   Saved to: " + outputFile.getAbsolutePath() + "\n");
+            
+            return true;
+            
+        } catch (NumberFormatException e) {
+            System.err.println("❌ Invalid file size format");
+            return false;
+        } catch (IOException e) {
+            System.err.println("❌ Download failed: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
-
-        System.out.println("📥 Downloaded → " + saveFile.getAbsolutePath());
-        return true;
-
-    } catch (Exception e) {
-        System.err.println("❌ Download failed for '" + fileName + "'");
-        e.printStackTrace();
-        return false;
     }
-}
 
-    /**
- * Download file trực tiếp bằng host + port mà không cần connect() trước
- */
-  /*
-    public boolean downloadFile(String host, int port, String fileName, String savePath) {
-    try (Socket socket = new Socket(host, port)) {
-
-        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-        // Gửi yêu cầu
-        out.println("DOWNLOAD_REQUEST:" + fileName);
-
-        // Nhận kích thước file
-        String response = in.readLine();
-        if (!response.startsWith("FILE_SIZE:")) return false;
-
-        long fileSize = Long.parseLong(response.split(":")[1]);
-
-        // Nhận dữ liệu nhị phân
-        InputStream is = socket.getInputStream();
-        FileOutputStream fos = new FileOutputStream(savePath);
-
-        byte[] buffer = new byte[4096];
-        long total = 0;
-        int read;
-
-        while (total < fileSize && (read = is.read(buffer)) > 0) {
-            fos.write(buffer, 0, read);
-            total += read;
-        }
-
-        fos.close();
-        System.out.println("📥 Download completed -> " + savePath);
-        return true;
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        return false;
-    }
-    }
-*/
     // ============================================
     // HELPER METHODS
     // ============================================
@@ -408,17 +352,7 @@ public boolean downloadFile(String fileName, String saveDir) {
     /**
      * Format file size
      */
-    private String formatFileSize(long bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        } else if (bytes < 1024 * 1024) {
-            return String.format("%.2f KB", bytes / 1024.0);
-        } else if (bytes < 1024 * 1024 * 1024) {
-            return String.format("%.2f MB", bytes / (1024.0 * 1024));
-        } else {
-            return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
-        }
-    }
+   
     
     // ============================================
     // GETTERS & SETTERS
@@ -443,126 +377,146 @@ public boolean downloadFile(String fileName, String saveDir) {
     public void setDownloadFolder(String downloadFolder) {
         this.downloadFolder = downloadFolder;
     }
+    // ============================================
+    // ✅ STATIC METHOD - Download trực tiếp (không cần connect)
+    // ============================================
     
+    /**
+     * Download file trực tiếp từ peer mà không cần tạo instance
+     * 
+     * @param host IP của peer
+     * @param port Port của peer
+     * @param fileName Tên file cần download
+     * @param savePath Đường dẫn đầy đủ để lưu file (bao gồm tên file)
+     * @return true nếu thành công
+     */
+    public static boolean downloadFileDirect(String host, int port, String fileName, String savePath) {
+        Socket socket = null;
+        
+        try {
+            System.out.println("\n📥 Downloading: " + fileName);
+            System.out.println("   From: " + host + ":" + port);
+            System.out.println("   Save to: " + savePath);
+            
+            // 1. Kết nối đến peer
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(host, port), 5000); // 5s timeout
+            
+            System.out.println("   ✅ Connected to peer");
+            
+            // 2. Gửi request
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println("DOWNLOAD_REQUEST:" + fileName);
+            System.out.println("   📤 Sent: DOWNLOAD_REQUEST:" + fileName);
+            
+            // 3. Nhận response
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String response = in.readLine();
+            System.out.println("   📥 Received: " + response);
+            
+            // 4. Kiểm tra response
+            if (response == null || response.startsWith("ERROR:")) {
+                System.err.println("   ❌ Server error: " + response);
+                return false;
+            }
+            
+            if (!response.startsWith("FILE_SIZE:")) {
+                System.err.println("   ❌ Invalid response format");
+                return false;
+            }
+            
+            // 5. Parse file size
+          long fileSize = Long.parseLong(response.split(":")[1]);
+          System.out.println("   File size: " + formatFileSize(fileSize));
+    
+            
+            // 6. Nhận binary data
+            File outputFile = new File(savePath);
+            outputFile.getParentFile().mkdirs();
+            
+            try (FileOutputStream fos = new FileOutputStream(outputFile);
+                 InputStream is = socket.getInputStream()) {
+                
+                byte[] buffer = new byte[4096];
+                long totalRead = 0;
+                int bytesRead;
+                int lastProgress = 0;
+                
+                System.out.println("   Progress: 0%");
+                
+                while (totalRead < fileSize) {
+                    bytesRead = is.read(buffer);
+                    
+                    if (bytesRead == -1) {
+                        throw new IOException("Unexpected end of stream at " + totalRead + " bytes");
+                    }
+                    
+                    fos.write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                    
+                    // Progress bar
+                    int progress = (int) ((totalRead * 100) / fileSize);
+                    if (progress != lastProgress && progress % 10 == 0) {
+                        System.out.print("\r   Progress: " + progress + "%");
+                        lastProgress = progress;
+                    }
+                }
+                
+                System.out.print("\r   Progress: 100%\n");
+                
+                if (totalRead != fileSize) {
+                    System.err.println("   ⚠️  Warning: Expected " + fileSize + " bytes, received " + totalRead);
+                }
+            }
+            
+            System.out.println("   ✅ Download completed!");
+            System.out.println("   Saved to: " + outputFile.getAbsolutePath() + "\n");
+            
+            return true;
+            
+        } catch (SocketTimeoutException e) {
+            System.err.println("   ❌ Connection timeout");
+            return false;
+        } catch (ConnectException e) {
+            System.err.println("   ❌ Connection refused - peer offline?");
+            return false;
+        } catch (IOException e) {
+            System.err.println("   ❌ Download failed: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        } catch (NumberFormatException e) {
+            System.err.println("   ❌ Invalid file size format");
+            return false;
+        } finally {
+            // Đóng socket
+            if (socket != null && !socket.isClosed()) {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        
+    }
+    // ============================================
+    // HELPER METHODS
+    // ============================================
+    
+       private static String formatFileSize(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format("%.2f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format("%.2f MB", bytes / (1024.0 * 1024));
+        } else {
+            return String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024));
+        }
+    }
     // ============================================
     // TEST
     // ============================================
-    // ============================================
-// DOWNLOAD WITH PROGRESS (dùng cho JavaFX ProgressBar)
-// ============================================
-/**
- * Download file từ peer và lưu record vào bảng downloads
- * @param peerIp IP peer gửi file
- * @param peerPort Port peer gửi file
- * @param fileName Tên file cần download
- * @param saveDir Thư mục lưu file
- * @param downloaderId ID của user đang download
- * @return true nếu download thành công
- */
-public boolean downloadFileWithRecord(String peerIp, int peerPort, String fileName, String saveDir, int downloaderId) {
-    boolean success = false;
-    FileInfo fileInfo = null;
-
-    try (Socket socket = new Socket(peerIp, peerPort);
-         PrintWriter out = new PrintWriter(
-                 new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-         BufferedReader in = new BufferedReader(
-                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
-
-        // Gửi request file
-        out.println("REQUEST_FILE:" + fileName);
-        System.out.println("Sent REQUEST_FILE: " + fileName);
-
-        String response = in.readLine();
-        if (response == null || !response.startsWith("FILE_INFO:")) {
-            System.err.println("❌ File not found or invalid response: " + response);
-            return false;
-        }
-
-        // Parse metadata
-        String[] meta = response.split(":");
-        long fileSize = Long.parseLong(meta[2]);
-
-        // Nhận dữ liệu vào ByteArrayOutputStream để kiểm tra hash trước
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        InputStream rawIn = socket.getInputStream();
-        byte[] buffer = new byte[4096];
-        long received = 0;
-        int read;
-        while (received < fileSize && (read = rawIn.read(buffer)) != -1) {
-            baos.write(buffer, 0, read);
-            received += read;
-
-            // Log tiến trình
-            double progress = (double) received / fileSize;
-            System.out.printf("\r📥 Downloading... %.2f%%", progress * 100);
-        }
-        System.out.println();
-
-        byte[] fileData = baos.toByteArray();
-
-        // Lấy thông tin file từ DB để so sánh hash
-        FileDAO fileDAO = new FileDAO();
-        fileInfo = fileDAO.getFileByName(fileName);
-        if (fileInfo == null) {
-            System.err.println("⚠️ File not found in DB: " + fileName);
-            return false;
-        }
-
-        // Tính hash MD5
-        MessageDigest digest = MessageDigest.getInstance("MD5");
-        byte[] hashBytes = digest.digest(fileData);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : hashBytes) sb.append(String.format("%02x", b));
-        String downloadedHash = sb.toString();
-
-        // So sánh hash
-        if (!downloadedHash.equalsIgnoreCase(fileInfo.getFileHash())) {
-            System.err.println("❌ File tải về không khớp với DB: " + fileName);
-            success = false;
-        } else {
-            // Lưu file
-            File outFile = new File(saveDir, fileName);
-            outFile.getParentFile().mkdirs();
-            try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                fos.write(fileData);
-            }
-            System.out.println("✅ FILE DOWNLOADED AND VERIFIED → " + outFile.getAbsolutePath());
-            success = true;
-        }
-
-    } catch (Exception e) {
-        System.err.println("❌ Download failed for '" + fileName + "'");
-        e.printStackTrace();
-        success = false;
-    } finally {
-        // Cập nhật vào bảng downloads
-        if (fileInfo != null) {
-            try (Connection conn = DatabaseConnection.getConnection();
-                 PreparedStatement ps = conn.prepareStatement(
-                         "INSERT INTO downloads(file_id, downloader_id, download_date, status) VALUES (?, ?, ?, ?)")) {
-
-                ps.setInt(1, fileInfo.getFileId());
-                ps.setInt(2, downloaderId);
-                ps.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
-                ps.setString(4, success ? "completed" : "failed");
-                ps.executeUpdate();
-
-                System.out.println("✅ Download record saved to DB: " + fileName + " -> " + (success ? "completed" : "failed"));
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        } else {
-            System.err.println("⚠️ Could not save download record (file not found in DB): " + fileName);
-        }
-    }
-
-    return success;
-}
-
-
-
-
     /**
      * Main method - Test client
      * 
