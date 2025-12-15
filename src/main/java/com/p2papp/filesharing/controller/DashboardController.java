@@ -208,6 +208,10 @@ public class DashboardController {
         executor.shutdownNow();
     }
     
+// ============================================
+// FIXED: Upload với tên file ASCII an toàn
+// ============================================
+
 @FXML
 private void handleUpload() {
     if (currentUser == null) {
@@ -224,19 +228,20 @@ private void handleUpload() {
     
     new Thread(() -> {
         try {
-            // ✅ NORMALIZE tên file
             String originalName = selectedFile.getName();
-            String normalizedName = normalizeFileName(originalName);
+            
+            // ✅ CHUYỂN SANG ASCII AN TOÀN
+            String safeName = toSafeASCIIFileName(originalName);
             
             System.out.println("📁 Original: " + originalName);
-            System.out.println("📝 Normalized: " + normalizedName);
+            System.out.println("📝 Safe ASCII: " + safeName);
             
             String folderPath = "storage/user_" + currentUser.getUserId();
             File folder = new File(folderPath);
             if (!folder.exists()) folder.mkdirs();
             
-            // ✅ Lưu với tên normalized
-            File destFile = new File(folder, normalizedName);
+            // Lưu với tên ASCII an toàn
+            File destFile = new File(folder, safeName);
             Files.copy(selectedFile.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             
             String hash = HashUtil.hashFile(destFile);
@@ -250,7 +255,7 @@ private void handleUpload() {
             }
             
             FileInfo info = new FileInfo();
-            info.setFileName(normalizedName);  // ← Dùng tên normalized
+            info.setFileName(safeName);  // ← Dùng tên ASCII
             info.setFileSize(selectedFile.length());
             info.setFilePath(destFile.getAbsolutePath());
             info.setFileHash(hash);
@@ -261,9 +266,9 @@ private void handleUpload() {
             
             javafx.application.Platform.runLater(() -> {
                 if (ok) {
-                    showInfo("Upload successful!\n" +
+                    showInfo("✅ Upload successful!\n" +
                             "Original: " + originalName + "\n" +
-                            "Saved as: " + normalizedName);
+                            "Saved as: " + safeName);
                     loadMyFiles();
                     loadAllFiles();
                 } else {
@@ -279,7 +284,45 @@ private void handleUpload() {
         }
     }).start();
 }
+// ============================================
+// ✅ HELPER: Chuyển tên file sang ASCII an toàn
+// ============================================
+
+/**
+ * Chuyển tên file sang ASCII an toàn (bỏ dấu tiếng Việt + ký tự đặc biệt)
+ * 
+ * Ví dụ:
+ * "Buổi 37_thứ 6 7 ngày 31.10 01.11.2025 (khóa 256).pdf"
+ * → "Buoi_37_thu_6_7_ngay_31.10_01.11.2025_khoa_256.pdf"
+ * 
+ * @param fileName Tên file gốc
+ * @return Tên file ASCII an toàn
+ */
+private String toSafeASCIIFileName(String fileName) {
+    if (fileName == null || fileName.trim().isEmpty()) {
+        return "unnamed_file";
+    }
     
+    // 1. Bỏ dấu tiếng Việt
+    String normalized = removeVietnameseAccents(fileName);
+    
+    // 2. Bỏ ký tự đặc biệt (giữ lại: a-z, A-Z, 0-9, dấu chấm, gạch dưới, gạch ngang)
+    normalized = normalized.replaceAll("[^a-zA-Z0-9._-]", "_");
+    
+    // 3. Bỏ nhiều underscore liên tiếp
+    normalized = normalized.replaceAll("_{2,}", "_");
+    
+    // 4. Trim underscores ở đầu/cuối
+    normalized = normalized.replaceAll("^_+|_+$", "");
+    
+    // 5. Nếu tên rỗng sau khi normalize → dùng timestamp
+    if (normalized.isEmpty()) {
+        normalized = "file_" + System.currentTimeMillis();
+    }
+    
+    return normalized;
+}
+
     @FXML
     private void handleDeleteFile() {
         FileInfo selected = tblMyFiles.getSelectionModel().getSelectedItem();
@@ -521,10 +564,16 @@ private void handleUpload() {
      * @param s String cần bỏ dấu
      * @return String không dấu
      */
-    private String removeVietnameseAccents(String s) {
-        if (s == null) return null;
-        
-        String temp = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
-        return temp.replaceAll("\\p{M}", "");
-    }
+ /**
+ * Bỏ dấu tiếng Việt (NFD normalization)
+ */
+private String removeVietnameseAccents(String s) {
+    if (s == null) return null;
+    
+    // Normalize về dạng NFD (tách ký tự có dấu thành ký tự base + dấu)
+    String temp = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
+    
+    // Bỏ các dấu (Combining Diacritical Marks)
+    return temp.replaceAll("\\p{M}", "");
+}
 }

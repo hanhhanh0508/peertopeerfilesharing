@@ -5,6 +5,7 @@ import com.p2papp.filesharing.model.FileInfo;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.*;
 
 /**
@@ -258,47 +259,151 @@ public class PeerServer extends Thread {
             String info = "INFO:Port=" + port + ",Status=Running,Files=" + countFiles();
             sendResponse(info);
         }
-      /**
-         * s DOWNLOAD_REQUEST handler - Gửi file từ database
-         */
-        private void handleDownloadRequest(String fileName) {
-            try {
-                System.out.println("   📥 Download request: " + fileName);
-                
-                // Lấy thông tin file từ database
-                FileDAO fileDAO = new FileDAO();
-                FileInfo fileInfo = fileDAO.getFileByName(fileName);
-                
-                if (fileInfo == null) {
-                    System.err.println("   ❌ File not found in database: " + fileName);
-                    sendResponse("ERROR:FILE_NOT_FOUND");
-                    return;
-                }
-                
-                // Lấy file từ disk
-                File file = new File(fileInfo.getFilePath());
-                
-                if (!file.exists()) {
-                    System.err.println("   ❌ File not on disk: " + file.getAbsolutePath());
-                    sendResponse("ERROR:FILE_NOT_ON_DISK");
-                    return;
-                }
-                
-                // Gửi metadata
-                sendResponse("FILE_SIZE:" + file.length());
-                System.out.println("   📤 Sending file: " + fileName + " (" + file.length() + " bytes)");
-                
-                // Gửi binary data
-                sendBinaryFile(file);
-                
-                System.out.println("   ✅ File sent successfully: " + fileName);
-                
-            } catch (Exception e) {
-                System.err.println("   ❌ Download error: " + e.getMessage());
-                e.printStackTrace();
-                sendResponse("ERROR:SEND_FAILED");
-            }
+/**
+ * ✅ FIXED: DOWNLOAD_REQUEST handler - Xử lý tên file với nhiều encoding
+ */
+private void handleDownloadRequest(String fileName) {
+    try {
+        System.out.println("   📥 Download request: " + fileName);
+        
+        FileDAO fileDAO = new FileDAO();
+        FileInfo fileInfo = null;
+        
+        // Thử 1: Tìm exact match
+        fileInfo = fileDAO.getFileByName(fileName);
+        
+        // Thử 2: Nếu không tìm thấy, thử normalize và tìm lại
+        if (fileInfo == null) {
+            System.out.println("   ⚠️  Exact match not found, trying normalized search...");
+            
+            String normalized = normalizeFileName(fileName);
+            fileInfo = fileDAO.getFileByName(normalized);
         }
+        
+        // Thử 3: Tìm tất cả file có tên tương tự
+        if (fileInfo == null) {
+            System.out.println("   ⚠️  Normalized search failed, trying fuzzy search...");
+            
+            List<FileInfo> allFiles = fileDAO.getAllSharedFiles();
+            fileInfo = findClosestMatch(fileName, allFiles);
+        }
+        
+        if (fileInfo == null) {
+            System.err.println("   ❌ File not found in database: " + fileName);
+            sendResponse("ERROR:FILE_NOT_FOUND");
+            return;
+        }
+        
+        // Lấy file từ disk
+        File file = new File(fileInfo.getFilePath());
+        
+        if (!file.exists()) {
+            System.err.println("   ❌ File not on disk: " + file.getAbsolutePath());
+            sendResponse("ERROR:FILE_NOT_ON_DISK");
+            return;
+        }
+        
+        // Gửi metadata
+        sendResponse("FILE_SIZE:" + file.length());
+        System.out.println("   📤 Sending file: " + fileInfo.getFileName() + 
+                         " (" + file.length() + " bytes)");
+        
+        // Gửi binary data
+        sendBinaryFile(file);
+        
+        System.out.println("   ✅ File sent successfully: " + fileInfo.getFileName());
+        
+    } catch (Exception e) {
+        System.err.println("   ❌ Download error: " + e.getMessage());
+        e.printStackTrace();
+        sendResponse("ERROR:SEND_FAILED");
+    }
+}
+
+/**
+ * Normalize tên file (bỏ dấu, lowercase, bỏ ký tự đặc biệt)
+ */
+private String normalizeFileName(String fileName) {
+    if (fileName == null) return "";
+    
+    // Bỏ dấu tiếng Việt
+    String temp = java.text.Normalizer.normalize(fileName, java.text.Normalizer.Form.NFD);
+    temp = temp.replaceAll("\\p{M}", "");
+    
+    // Lowercase và bỏ ký tự đặc biệt
+    temp = temp.toLowerCase()
+               .replaceAll("[^a-z0-9._-]", "_")
+               .replaceAll("_{2,}", "_")
+               .replaceAll("^_+|_+$", "");
+    
+    return temp;
+}
+
+/**
+ * Tìm file gần khớp nhất dựa trên tên
+ */
+private FileInfo findClosestMatch(String target, List<FileInfo> files) {
+    if (files == null || files.isEmpty()) return null;
+    
+    String normalizedTarget = normalizeFileName(target);
+    
+    FileInfo bestMatch = null;
+    double bestSimilarity = 0.0;
+    
+    for (FileInfo file : files) {
+        String normalizedFile = normalizeFileName(file.getFileName());
+        
+        double similarity = calculateSimilarity(normalizedTarget, normalizedFile);
+        
+        if (similarity > bestSimilarity) {
+            bestSimilarity = similarity;
+            bestMatch = file;
+        }
+    }
+    
+    // Chỉ chấp nhận nếu độ tương đồng > 80%
+    if (bestSimilarity >= 0.8) {
+        System.out.println("   ✅ Found closest match: " + bestMatch.getFileName() + 
+                         " (similarity: " + String.format("%.1f%%", bestSimilarity * 100) + ")");
+        return bestMatch;
+    }
+    
+    return null;
+}
+
+/**
+ * Tính độ tương đồng giữa 2 string (Levenshtein distance)
+ */
+private double calculateSimilarity(String s1, String s2) {
+    int maxLength = Math.max(s1.length(), s2.length());
+    if (maxLength == 0) return 1.0;
+    
+    int distance = levenshteinDistance(s1, s2);
+    return 1.0 - (double) distance / maxLength;
+}
+
+/**
+ * Levenshtein distance (edit distance)
+ */
+private int levenshteinDistance(String s1, String s2) {
+    int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+    
+    for (int i = 0; i <= s1.length(); i++) dp[i][0] = i;
+    for (int j = 0; j <= s2.length(); j++) dp[0][j] = j;
+    
+    for (int i = 1; i <= s1.length(); i++) {
+        for (int j = 1; j <= s2.length(); j++) {
+            int cost = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+            
+            dp[i][j] = Math.min(
+                Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                dp[i - 1][j - 1] + cost
+            );
+        }
+    }
+    
+    return dp[s1.length()][s2.length()];
+}
         
 
         /**

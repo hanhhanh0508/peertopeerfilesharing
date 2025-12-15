@@ -355,45 +355,55 @@ public List<FileInfo> getAllSharedFiles() {
         return temp.replaceAll("\\p{M}", "");
     }
 
-    /**
- * Lấy thông tin file theo đúng tên file (exact match)
+/**
+ * ✅ FIXED: Lấy file theo tên (case-insensitive, ASCII normalized)
+ * 
+ * So sánh theo LOWERCASE và bỏ khoảng trắng
  */
 public FileInfo getFileByName(String fileName) {
-        if (fileName == null || fileName.isEmpty()) return null;
+    if (fileName == null || fileName.isEmpty()) return null;
 
-        String sql = "SELECT f.*, u.username AS owner_username " +
-                     "FROM files f " +
-                     "JOIN users u ON f.user_id = u.user_id " +
-                     "WHERE REPLACE(LOWER(f.file_name), ' ', '') = ? LIMIT 1";
+    // Chuẩn hóa tên file: lowercase, bỏ khoảng trắng, bỏ underscore
+    String normalizedInput = fileName.toLowerCase()
+                                     .replace(" ", "")
+                                     .replace("_", "");
 
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+    String sql = "SELECT f.*, u.username AS owner_username " +
+                 "FROM files f " +
+                 "JOIN users u ON f.user_id = u.user_id " +
+                 "WHERE REPLACE(REPLACE(LOWER(f.file_name), ' ', ''), '_', '') = ?";
 
-            // Chuẩn hóa tên file client gửi: bỏ dấu, lowercase, bỏ khoảng trắng
-            String normalizedName = removeAccent(fileName).toLowerCase().replace(" ", "");
-            pstmt.setString(1, normalizedName);
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            ResultSet rs = pstmt.executeQuery();
+        pstmt.setString(1, normalizedInput);
+        ResultSet rs = pstmt.executeQuery();
 
-            if (rs.next()) {
-                FileInfo file = new FileInfo();
-                file.setFileId(rs.getInt("file_id"));
-                file.setUserId(rs.getInt("user_id"));
-                file.setFileName(rs.getString("file_name"));
-                file.setFileSize(rs.getLong("file_size"));
-                file.setFileHash(rs.getString("file_hash"));
-                file.setFilePath(rs.getString("file_path"));
-                file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("owner_username"));
-                return file;
-            }
-
-        } catch (SQLException e) {
-            System.err.println("❌ Get file by name error: " + e.getMessage());
+        if (rs.next()) {
+            FileInfo file = new FileInfo();
+            file.setFileId(rs.getInt("file_id"));
+            file.setUserId(rs.getInt("user_id"));
+            file.setFileName(rs.getString("file_name"));
+            file.setFileSize(rs.getLong("file_size"));
+            file.setFileHash(rs.getString("file_hash"));
+            file.setFilePath(rs.getString("file_path"));
+            file.setSharedDate(rs.getTimestamp("shared_date"));
+            file.setOwnerUsername(rs.getString("owner_username"));
+            
+            System.out.println("✅ Found file in DB: " + file.getFileName());
+            return file;
         }
+        
+        System.err.println("❌ File not found in DB for: " + fileName);
+        System.err.println("   Normalized input: " + normalizedInput);
 
-        return null;
+    } catch (SQLException e) {
+        System.err.println("❌ Get file by name error: " + e.getMessage());
     }
+
+    return null;
+}
+
 public List<FileInfo> getFilesByName(String fileName) {
     List<FileInfo> files = new ArrayList<>();
 
@@ -426,7 +436,57 @@ public List<FileInfo> getFilesByName(String fileName) {
 
     return files;
 }
+/**
+ * ✅ ALTERNATIVE: Tìm file gần khớp nhất (fuzzy search)
+ * Dùng khi tên file có thể khác encoding nhẹ
+ */
+public FileInfo findBestMatch(String fileName) {
+    if (fileName == null || fileName.isEmpty()) return null;
 
+    String sql = "SELECT f.*, u.username AS owner_username, " +
+                 "LEVENSHTEIN(LOWER(f.file_name), LOWER(?)) AS distance " +
+                 "FROM files f " +
+                 "JOIN users u ON f.user_id = u.user_id " +
+                 "ORDER BY distance ASC " +
+                 "LIMIT 1";
+
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+        pstmt.setString(1, fileName);
+        ResultSet rs = pstmt.executeQuery();
+
+        if (rs.next()) {
+            int distance = rs.getInt("distance");
+            
+            // Chỉ chấp nhận nếu độ tương đồng > 80%
+            int maxLength = Math.max(fileName.length(), rs.getString("file_name").length());
+            double similarity = 1.0 - (double) distance / maxLength;
+            
+            if (similarity >= 0.8) {
+                FileInfo file = new FileInfo();
+                file.setFileId(rs.getInt("file_id"));
+                file.setUserId(rs.getInt("user_id"));
+                file.setFileName(rs.getString("file_name"));
+                file.setFileSize(rs.getLong("file_size"));
+                file.setFileHash(rs.getString("file_hash"));
+                file.setFilePath(rs.getString("file_path"));
+                file.setSharedDate(rs.getTimestamp("shared_date"));
+                file.setOwnerUsername(rs.getString("owner_username"));
+                
+                System.out.println("✅ Found best match: " + file.getFileName() + 
+                                 " (similarity: " + String.format("%.1f%%", similarity * 100) + ")");
+                return file;
+            }
+        }
+
+    } catch (SQLException e) {
+        // LEVENSHTEIN function không có sẵn trong MySQL
+        System.err.println("⚠️  Fuzzy search not supported: " + e.getMessage());
+    }
+
+    return null;
+}
 
     /**
      * Tìm kiếm file theo tên
