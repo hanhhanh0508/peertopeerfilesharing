@@ -120,27 +120,54 @@ public class FileDAO {
         return files;
     }
     */
- public List<FileInfo> getFilesByUser(int userId) {
+ /**
+ * Lấy tất cả file của 1 user
+ * 
+ * ✅ FIXED: Tránh NullPointerException
+ */
+public List<FileInfo> getFilesByUser(int userId) {
     List<FileInfo> files = new ArrayList<>();
-
-    String sql =
-        "SELECT f.file_id, f.user_id, f.file_name, f.file_size, f.file_hash, " +
-        "       f.file_path, f.shared_date, u.username AS owner_name " +  // alias rõ ràng
-        "FROM files f " +
-        "JOIN users u ON f.user_id = u.user_id " +
-        "WHERE f.user_id = ? " +
-        "ORDER BY f.shared_date DESC";
-
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
+    
+    String sql = "SELECT " +
+                 "f.file_id, " +
+                 "f.user_id, " +
+                 "f.file_name, " +
+                 "f.file_size, " +
+                 "f.file_hash, " +
+                 "f.file_path, " +
+                 "f.shared_date, " +
+                 "u.username " +
+                 "FROM files f " +
+                 "INNER JOIN users u ON f.user_id = u.user_id " +
+                 "WHERE f.user_id = ? " +
+                 "ORDER BY f.shared_date DESC";
+    
+    Connection conn = null;
+    PreparedStatement pstmt = null;
+    ResultSet rs = null;
+    
+    try {
+        conn = DatabaseConnection.getConnection();
+        
+        if (conn == null) {
+            System.err.println("❌ Database connection is null!");
+            return files;
+        }
+        
+        pstmt = conn.prepareStatement(sql);
         pstmt.setInt(1, userId);
-
-        try (ResultSet rs = pstmt.executeQuery()) {
-
-            while (rs.next()) {
-
+        
+        rs = pstmt.executeQuery();
+        
+        if (rs == null) {
+            System.err.println("❌ ResultSet is null!");
+            return files;
+        }
+        
+        while (rs.next()) {
+            try {
                 FileInfo file = new FileInfo();
+                
                 file.setFileId(rs.getInt("file_id"));
                 file.setUserId(rs.getInt("user_id"));
                 file.setFileName(rs.getString("file_name"));
@@ -148,26 +175,33 @@ public class FileDAO {
                 file.setFileHash(rs.getString("file_hash"));
                 file.setFilePath(rs.getString("file_path"));
                 file.setSharedDate(rs.getTimestamp("shared_date"));
-
-                // tránh lỗi nếu cột trống
-                file.setOwnerUsername(rs.getString("owner_name") != null
-                                      ? rs.getString("owner_name")
-                                      : "Unknown");
-
+                file.setOwnerUsername(rs.getString("username"));
+                
                 files.add(file);
+                
+            } catch (SQLException e) {
+                System.err.println("❌ Error reading row: " + e.getMessage());
+                e.printStackTrace();
             }
         }
-
-        System.out.println("📁 Loaded " + files.size() + " file(s) from user_id=" + userId);
-
+        
+        System.out.println("✅ Found " + files.size() + " files for user " + userId);
+        
     } catch (SQLException e) {
-        System.err.println("❌ ERROR getFilesByUser(): " + e.getMessage());
+        System.err.println("❌ Get files by user error: " + e.getMessage());
         e.printStackTrace();
+        
+    } finally {
+        try {
+            if (rs != null) rs.close();
+            if (pstmt != null) pstmt.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
-
+    
     return files;
 }
-
 
      /**
      * Download file từ đường dẫn lưu trong DB về đường dẫn đích
@@ -248,43 +282,89 @@ public class FileDAO {
         return files;
     }
     */
+/**
+ * Lấy tất cả file được chia sẻ (từ tất cả users)
+ * 
+ * ✅ FIXED: Tránh NullPointerException
+ */
 public List<FileInfo> getAllSharedFiles() {
     List<FileInfo> files = new ArrayList<>();
-
-    // ✅ FIX: Chỉ SELECT các columns CẦN THIẾT
-    String sql = "SELECT f.file_id, f.user_id, f.file_name, f.file_size, " +
-                 "f.file_hash, f.file_path, f.shared_date, u.username " +
+    
+    // ✅ Query rõ ràng từng column
+    String sql = "SELECT " +
+                 "f.file_id, " +
+                 "f.user_id, " +
+                 "f.file_name, " +
+                 "f.file_size, " +
+                 "f.file_hash, " +
+                 "f.file_path, " +
+                 "f.shared_date, " +
+                 "u.username " +
                  "FROM files f " +
-                 "JOIN users u ON f.user_id = u.user_id " +
+                 "INNER JOIN users u ON f.user_id = u.user_id " +
                  "ORDER BY f.shared_date DESC";
-
-    try (Connection conn = DatabaseConnection.getConnection();
-         Statement stmt = conn.createStatement();
-         ResultSet rs = stmt.executeQuery(sql)) {
-
-        while (rs.next()) {
-            FileInfo file = new FileInfo();
-            
-            // ✅ Lấy từng column theo TÊN (safe hơn index)
-            file.setFileId(rs.getInt("file_id"));
-            file.setUserId(rs.getInt("user_id"));
-            file.setFileName(rs.getString("file_name"));
-            file.setFileSize(rs.getLong("file_size"));
-            file.setFileHash(rs.getString("file_hash"));
-            file.setFilePath(rs.getString("file_path"));
-            file.setSharedDate(rs.getTimestamp("shared_date"));
-            file.setOwnerUsername(rs.getString("username"));
-
-            files.add(file);
+    
+    Connection conn = null;
+    Statement stmt = null;
+    ResultSet rs = null;
+    
+    try {
+        conn = DatabaseConnection.getConnection();
+        
+        if (conn == null) {
+            System.err.println("❌ Database connection is null!");
+            return files;
         }
-
+        
+        stmt = conn.createStatement();
+        rs = stmt.executeQuery(sql);
+        
+        // ✅ Kiểm tra ResultSet có data không
+        if (rs == null) {
+            System.err.println("❌ ResultSet is null!");
+            return files;
+        }
+        
+        while (rs.next()) {
+            try {
+                FileInfo file = new FileInfo();
+                
+                // ✅ Đọc từng column với error handling
+                file.setFileId(rs.getInt("file_id"));
+                file.setUserId(rs.getInt("user_id"));
+                file.setFileName(rs.getString("file_name"));
+                file.setFileSize(rs.getLong("file_size"));
+                file.setFileHash(rs.getString("file_hash"));
+                file.setFilePath(rs.getString("file_path"));
+                file.setSharedDate(rs.getTimestamp("shared_date"));
+                file.setOwnerUsername(rs.getString("username"));
+                
+                files.add(file);
+                
+            } catch (SQLException e) {
+                System.err.println("❌ Error reading row: " + e.getMessage());
+                e.printStackTrace();
+                // Continue to next row
+            }
+        }
+        
         System.out.println("✅ Found " + files.size() + " shared files");
-
+        
     } catch (SQLException e) {
         System.err.println("❌ Get all files error: " + e.getMessage());
         e.printStackTrace();
+        
+    } finally {
+        // ✅ Close resources properly
+        try {
+            if (rs != null) rs.close();
+            if (stmt != null) stmt.close();
+            // DON'T close connection - it's singleton!
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
-
+    
     return files;
 }
 

@@ -70,16 +70,7 @@ public class DatabaseConnection {
         try {
             // Kiểm tra connection
             if (connection == null || connection.isClosed()) {
-                
-                // Bước 1: Load MySQL JDBC Driver
-                // Driver này nằm trong thư viện mysql-connector-j (pom.xml)
                 Class.forName("com.mysql.cj.jdbc.Driver");
-                
-                // Bước 2: Tạo kết nối
-                // DriverManager.getConnection() sẽ:
-                // - Kết nối đến MySQL server tại localhost:3306
-                // - Chọn database: p2p_file_sharing
-                // - Login bằng USER và PASSWORD
                 connection = DriverManager.getConnection(URL, USER, PASSWORD);
                 
                 // In thông báo thành công

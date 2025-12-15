@@ -495,4 +495,40 @@ private void handleUpload() {
         alert.setContentText(message);
         alert.showAndWait();
     }
+    // ============================================
+    // HELPER METHODS - File name normalization
+    // ============================================
+    
+    /**
+     * Normalize tên file để tránh lỗi encoding
+     * 
+     * @param fileName Tên file gốc
+     * @return Tên file đã normalize (bỏ ký tự đặc biệt)
+     */
+    private String normalizeFileName(String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) {
+            return "unnamed_file";
+        }
+        
+        // Replace ký tự đặc biệt Windows không cho phép
+        String normalized = fileName
+            .replaceAll("[\\\\/:*?\"<>|]", "_")  // \ / : * ? " < > |
+            .replaceAll("\\s+", "_")             // Space → underscore
+            .replaceAll("_{2,}", "_");            // Multiple underscores → 1
+        
+        return normalized;
+    }
+    
+    /**
+     * Optional: Bỏ dấu tiếng Việt nếu cần
+     * 
+     * @param s String cần bỏ dấu
+     * @return String không dấu
+     */
+    private String removeVietnameseAccents(String s) {
+        if (s == null) return null;
+        
+        String temp = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
+        return temp.replaceAll("\\p{M}", "");
+    }
 }
