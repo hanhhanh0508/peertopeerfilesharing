@@ -120,84 +120,59 @@ public class FileDAO {
         return files;
     }
     */
- /**
- * Lấy tất cả file của 1 user
- * 
- * ✅ FIXED: Tránh NullPointerException
+/**
+ * Lấy file của 1 user - FIXED VERSION
  */
 public List<FileInfo> getFilesByUser(int userId) {
     List<FileInfo> files = new ArrayList<>();
     
     String sql = "SELECT " +
-                 "f.file_id, " +
-                 "f.user_id, " +
-                 "f.file_name, " +
-                 "f.file_size, " +
-                 "f.file_hash, " +
-                 "f.file_path, " +
-                 "f.shared_date, " +
-                 "u.username " +
+                 "f.file_id AS file_id, " +
+                 "f.user_id AS user_id, " +
+                 "f.file_name AS file_name, " +
+                 "f.file_size AS file_size, " +
+                 "f.file_hash AS file_hash, " +
+                 "f.file_path AS file_path, " +
+                 "f.shared_date AS shared_date, " +
+                 "u.username AS username " +
                  "FROM files f " +
                  "INNER JOIN users u ON f.user_id = u.user_id " +
                  "WHERE f.user_id = ? " +
                  "ORDER BY f.shared_date DESC";
     
-    Connection conn = null;
-    PreparedStatement pstmt = null;
-    ResultSet rs = null;
-    
-    try {
-        conn = DatabaseConnection.getConnection();
+    try (Connection conn = DatabaseConnection.getConnection();
+         PreparedStatement pstmt = conn.prepareStatement(sql)) {
         
         if (conn == null) {
-            System.err.println("❌ Database connection is null!");
+            System.err.println("❌ Connection is null!");
             return files;
         }
         
-        pstmt = conn.prepareStatement(sql);
         pstmt.setInt(1, userId);
         
-        rs = pstmt.executeQuery();
-        
-        if (rs == null) {
-            System.err.println("❌ ResultSet is null!");
-            return files;
-        }
-        
-        while (rs.next()) {
-            try {
+        try (ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
                 FileInfo file = new FileInfo();
                 
-                file.setFileId(rs.getInt("file_id"));
-                file.setUserId(rs.getInt("user_id"));
-                file.setFileName(rs.getString("file_name"));
-                file.setFileSize(rs.getLong("file_size"));
-                file.setFileHash(rs.getString("file_hash"));
-                file.setFilePath(rs.getString("file_path"));
-                file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("username"));
+                // Dùng index
+                file.setFileId(rs.getInt(1));
+                file.setUserId(rs.getInt(2));
+                file.setFileName(rs.getString(3));
+                file.setFileSize(rs.getLong(4));
+                file.setFileHash(rs.getString(5));
+                file.setFilePath(rs.getString(6));
+                file.setSharedDate(rs.getTimestamp(7));
+                file.setOwnerUsername(rs.getString(8));
                 
                 files.add(file);
-                
-            } catch (SQLException e) {
-                System.err.println("❌ Error reading row: " + e.getMessage());
-                e.printStackTrace();
             }
+            
+            System.out.println("✅ Found " + files.size() + " files for user " + userId);
         }
-        
-        System.out.println("✅ Found " + files.size() + " files for user " + userId);
         
     } catch (SQLException e) {
         System.err.println("❌ Get files by user error: " + e.getMessage());
         e.printStackTrace();
-        
-    } finally {
-        try {
-            if (rs != null) rs.close();
-            if (pstmt != null) pstmt.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
     
     return files;
@@ -283,86 +258,56 @@ public List<FileInfo> getFilesByUser(int userId) {
     }
     */
 /**
- * Lấy tất cả file được chia sẻ (từ tất cả users)
- * 
- * ✅ FIXED: Tránh NullPointerException
+ * Lấy tất cả file được chia sẻ - FIXED VERSION
  */
 public List<FileInfo> getAllSharedFiles() {
     List<FileInfo> files = new ArrayList<>();
     
-    // ✅ Query rõ ràng từng column
     String sql = "SELECT " +
-                 "f.file_id, " +
-                 "f.user_id, " +
-                 "f.file_name, " +
-                 "f.file_size, " +
-                 "f.file_hash, " +
-                 "f.file_path, " +
-                 "f.shared_date, " +
-                 "u.username " +
+                 "f.file_id AS file_id, " +
+                 "f.user_id AS user_id, " +
+                 "f.file_name AS file_name, " +
+                 "f.file_size AS file_size, " +
+                 "f.file_hash AS file_hash, " +
+                 "f.file_path AS file_path, " +
+                 "f.shared_date AS shared_date, " +
+                 "u.username AS username " +
                  "FROM files f " +
                  "INNER JOIN users u ON f.user_id = u.user_id " +
                  "ORDER BY f.shared_date DESC";
     
-    Connection conn = null;
-    Statement stmt = null;
-    ResultSet rs = null;
-    
-    try {
-        conn = DatabaseConnection.getConnection();
+    try (Connection conn = DatabaseConnection.getConnection()) {
         
         if (conn == null) {
-            System.err.println("❌ Database connection is null!");
+            System.err.println("❌ Connection is null!");
             return files;
         }
         
-        stmt = conn.createStatement();
-        rs = stmt.executeQuery(sql);
-        
-        // ✅ Kiểm tra ResultSet có data không
-        if (rs == null) {
-            System.err.println("❌ ResultSet is null!");
-            return files;
-        }
-        
-        while (rs.next()) {
-            try {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
                 FileInfo file = new FileInfo();
                 
-                // ✅ Đọc từng column với error handling
-                file.setFileId(rs.getInt("file_id"));
-                file.setUserId(rs.getInt("user_id"));
-                file.setFileName(rs.getString("file_name"));
-                file.setFileSize(rs.getLong("file_size"));
-                file.setFileHash(rs.getString("file_hash"));
-                file.setFilePath(rs.getString("file_path"));
-                file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("username"));
+                // Dùng index thay vì tên column
+                file.setFileId(rs.getInt(1));          // file_id
+                file.setUserId(rs.getInt(2));          // user_id
+                file.setFileName(rs.getString(3));     // file_name
+                file.setFileSize(rs.getLong(4));       // file_size
+                file.setFileHash(rs.getString(5));     // file_hash
+                file.setFilePath(rs.getString(6));     // file_path
+                file.setSharedDate(rs.getTimestamp(7)); // shared_date
+                file.setOwnerUsername(rs.getString(8)); // username
                 
                 files.add(file);
-                
-            } catch (SQLException e) {
-                System.err.println("❌ Error reading row: " + e.getMessage());
-                e.printStackTrace();
-                // Continue to next row
             }
+            
+            System.out.println("✅ Found " + files.size() + " shared files");
         }
-        
-        System.out.println("✅ Found " + files.size() + " shared files");
         
     } catch (SQLException e) {
         System.err.println("❌ Get all files error: " + e.getMessage());
         e.printStackTrace();
-        
-    } finally {
-        // ✅ Close resources properly
-        try {
-            if (rs != null) rs.close();
-            if (stmt != null) stmt.close();
-            // DON'T close connection - it's singleton!
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
     
     return files;

@@ -208,7 +208,7 @@ public class DashboardController {
         executor.shutdownNow();
     }
     
-    @FXML
+@FXML
 private void handleUpload() {
     if (currentUser == null) {
         showError("User is not logged in!");
@@ -217,39 +217,33 @@ private void handleUpload() {
     
     FileChooser fileChooser = new FileChooser();
     fileChooser.setTitle("Select File to Upload");
-    fileChooser.getExtensionFilters().add(
-        new FileChooser.ExtensionFilter("All Files", "*.*")
-    );
+    fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("All Files", "*.*"));
     
     File selectedFile = fileChooser.showOpenDialog(null);
     if (selectedFile == null) return;
     
     new Thread(() -> {
         try {
-            // ✅ NORMALIZE tên file để tránh lỗi encoding
+            // ✅ NORMALIZE tên file
             String originalName = selectedFile.getName();
             String normalizedName = normalizeFileName(originalName);
             
-            System.out.println("📁 Original name: " + originalName);
-            System.out.println("📝 Normalized name: " + normalizedName);
+            System.out.println("📁 Original: " + originalName);
+            System.out.println("📝 Normalized: " + normalizedName);
             
             String folderPath = "storage/user_" + currentUser.getUserId();
             File folder = new File(folderPath);
             if (!folder.exists()) folder.mkdirs();
             
-            // Dùng tên đã normalize
+            // ✅ Lưu với tên normalized
             File destFile = new File(folder, normalizedName);
-            Files.copy(
-                selectedFile.toPath(), 
-                destFile.toPath(), 
-                StandardCopyOption.REPLACE_EXISTING
-            );
+            Files.copy(selectedFile.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             
             String hash = HashUtil.hashFile(destFile);
             
             FileInfo existing = fileDAO.getFileByHash(hash);
             if (existing != null) {
-                Platform.runLater(() -> 
+                javafx.application.Platform.runLater(() -> 
                     showError("File already exists: " + existing.getFileName())
                 );
                 return;
@@ -265,9 +259,11 @@ private void handleUpload() {
             
             boolean ok = fileDAO.addFile(info);
             
-            Platform.runLater(() -> {
+            javafx.application.Platform.runLater(() -> {
                 if (ok) {
-                    showInfo("Upload successful!\nFile: " + normalizedName);
+                    showInfo("Upload successful!\n" +
+                            "Original: " + originalName + "\n" +
+                            "Saved as: " + normalizedName);
                     loadMyFiles();
                     loadAllFiles();
                 } else {
@@ -277,7 +273,7 @@ private void handleUpload() {
             
         } catch (Exception e) {
             e.printStackTrace();
-            Platform.runLater(() -> 
+            javafx.application.Platform.runLater(() -> 
                 showError("Upload failed: " + e.getMessage())
             );
         }
