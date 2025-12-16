@@ -77,106 +77,59 @@ public class FileDAO {
     // ============================================
     // READ - Lấy danh sách file
     // ============================================
-    
-    /**
-     * Lấy tất cả file của 1 user
-     */
-    /*
-    public List<FileInfo> getFilesByUser(int userId) {
+/**
+ * Lấy file của 1 user - FIXED VERSION
+ */
+ public List<FileInfo> getFilesByUser(int userId) {
         List<FileInfo> files = new ArrayList<>();
         
-        String sql = "SELECT f.*, u.username as owner_username " +
+        // ✅ FIX: Dùng PreparedStatement với scrollable ResultSet
+        String sql = "SELECT " +
+                     "f.file_id, f.user_id, f.file_name, f.file_size, " +
+                     "f.file_hash, f.file_path, f.shared_date, u.username " +
                      "FROM files f " +
-                     "JOIN users u ON f.user_id = u.user_id " +
+                     "INNER JOIN users u ON f.user_id = u.user_id " +
                      "WHERE f.user_id = ? " +
                      "ORDER BY f.shared_date DESC";
         
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             PreparedStatement pstmt = conn.prepareStatement(sql,
+                     ResultSet.TYPE_SCROLL_INSENSITIVE,  // ← Scrollable
+                     ResultSet.CONCUR_READ_ONLY)) {
             
-            pstmt.setInt(1, userId);
-            ResultSet rs = pstmt.executeQuery();
-            
-            while (rs.next()) {
-                FileInfo file = new FileInfo();
-                file.setFileId(rs.getInt("file_id"));
-                file.setUserId(rs.getInt("user_id"));
-                file.setFileName(rs.getString("file_name"));
-                file.setFileSize(rs.getLong("file_size"));
-                file.setFileHash(rs.getString("file_hash"));
-                file.setFilePath(rs.getString("file_path"));
-                file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("owner_username"));
-                
-                files.add(file);
+            if (conn == null) {
+                System.err.println("❌ Connection is null!");
+                return files;
             }
             
-            System.out.println("✅ Found " + files.size() + " files for user " + userId);
+            pstmt.setInt(1, userId);
+            
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    FileInfo file = new FileInfo();
+                    file.setFileId(rs.getInt("file_id"));
+                    file.setUserId(rs.getInt("user_id"));
+                    file.setFileName(rs.getString("file_name"));
+                    file.setFileSize(rs.getLong("file_size"));
+                    file.setFileHash(rs.getString("file_hash"));
+                    file.setFilePath(rs.getString("file_path"));
+                    file.setSharedDate(rs.getTimestamp("shared_date"));
+                    file.setOwnerUsername(rs.getString("username"));
+                    
+                    files.add(file);
+                }
+                
+                System.out.println("✅ Found " + files.size() + " files for user " + userId);
+            }
             
         } catch (SQLException e) {
             System.err.println("❌ Get files by user error: " + e.getMessage());
+            e.printStackTrace();
         }
         
         return files;
     }
-    */
-/**
- * Lấy file của 1 user - FIXED VERSION
- */
-public List<FileInfo> getFilesByUser(int userId) {
-    List<FileInfo> files = new ArrayList<>();
-    
-    String sql = "SELECT " +
-                 "f.file_id AS file_id, " +
-                 "f.user_id AS user_id, " +
-                 "f.file_name AS file_name, " +
-                 "f.file_size AS file_size, " +
-                 "f.file_hash AS file_hash, " +
-                 "f.file_path AS file_path, " +
-                 "f.shared_date AS shared_date, " +
-                 "u.username AS username " +
-                 "FROM files f " +
-                 "INNER JOIN users u ON f.user_id = u.user_id " +
-                 "WHERE f.user_id = ? " +
-                 "ORDER BY f.shared_date DESC";
-    
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
-        
-        if (conn == null) {
-            System.err.println("❌ Connection is null!");
-            return files;
-        }
-        
-        pstmt.setInt(1, userId);
-        
-        try (ResultSet rs = pstmt.executeQuery()) {
-            while (rs.next()) {
-                FileInfo file = new FileInfo();
-                
-                // Dùng index
-                file.setFileId(rs.getInt(1));
-                file.setUserId(rs.getInt(2));
-                file.setFileName(rs.getString(3));
-                file.setFileSize(rs.getLong(4));
-                file.setFileHash(rs.getString(5));
-                file.setFilePath(rs.getString(6));
-                file.setSharedDate(rs.getTimestamp(7));
-                file.setOwnerUsername(rs.getString(8));
-                
-                files.add(file);
-            }
-            
-            System.out.println("✅ Found " + files.size() + " files for user " + userId);
-        }
-        
-    } catch (SQLException e) {
-        System.err.println("❌ Get files by user error: " + e.getMessage());
-        e.printStackTrace();
-    }
-    
-    return files;
-}
+
 
      /**
      * Download file từ đường dẫn lưu trong DB về đường dẫn đích
@@ -218,21 +171,30 @@ public List<FileInfo> getFilesByUser(int userId) {
             return false;
         }
     }
-    /**
-     * Lấy tất cả file được chia sẻ (từ tất cả users)
-     */
-   /*
-    public List<FileInfo> getAllSharedFiles() {
+/**
+ * Lấy tất cả file được chia sẻ - FIXED VERSION
+ */
+public List<FileInfo> getAllSharedFiles() {
         List<FileInfo> files = new ArrayList<>();
         
-        String sql = "SELECT f.*, u.username as owner_username " +
+        // ✅ FIX: Dùng PreparedStatement thay vì Statement
+        String sql = "SELECT " +
+                     "f.file_id, f.user_id, f.file_name, f.file_size, " +
+                     "f.file_hash, f.file_path, f.shared_date, u.username " +
                      "FROM files f " +
-                     "JOIN users u ON f.user_id = u.user_id " +
+                     "INNER JOIN users u ON f.user_id = u.user_id " +
                      "ORDER BY f.shared_date DESC";
         
         try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement pstmt = conn.prepareStatement(sql,
+                     ResultSet.TYPE_SCROLL_INSENSITIVE,  // ← Scrollable
+                     ResultSet.CONCUR_READ_ONLY);
+             ResultSet rs = pstmt.executeQuery()) {
+            
+            if (conn == null) {
+                System.err.println("❌ Connection is null!");
+                return files;
+            }
             
             while (rs.next()) {
                 FileInfo file = new FileInfo();
@@ -243,7 +205,7 @@ public List<FileInfo> getFilesByUser(int userId) {
                 file.setFileHash(rs.getString("file_hash"));
                 file.setFilePath(rs.getString("file_path"));
                 file.setSharedDate(rs.getTimestamp("shared_date"));
-                file.setOwnerUsername(rs.getString("owner_username"));
+                file.setOwnerUsername(rs.getString("username"));
                 
                 files.add(file);
             }
@@ -252,73 +214,15 @@ public List<FileInfo> getFilesByUser(int userId) {
             
         } catch (SQLException e) {
             System.err.println("❌ Get all files error: " + e.getMessage());
+            e.printStackTrace();
         }
         
         return files;
     }
-    */
-/**
- * Lấy tất cả file được chia sẻ - FIXED VERSION
- */
-public List<FileInfo> getAllSharedFiles() {
-    List<FileInfo> files = new ArrayList<>();
-    
-    String sql = "SELECT " +
-                 "f.file_id AS file_id, " +
-                 "f.user_id AS user_id, " +
-                 "f.file_name AS file_name, " +
-                 "f.file_size AS file_size, " +
-                 "f.file_hash AS file_hash, " +
-                 "f.file_path AS file_path, " +
-                 "f.shared_date AS shared_date, " +
-                 "u.username AS username " +
-                 "FROM files f " +
-                 "INNER JOIN users u ON f.user_id = u.user_id " +
-                 "ORDER BY f.shared_date DESC";
-    
-    try (Connection conn = DatabaseConnection.getConnection()) {
-        
-        if (conn == null) {
-            System.err.println("❌ Connection is null!");
-            return files;
-        }
-        
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
-            while (rs.next()) {
-                FileInfo file = new FileInfo();
-                
-                // Dùng index thay vì tên column
-                file.setFileId(rs.getInt(1));          // file_id
-                file.setUserId(rs.getInt(2));          // user_id
-                file.setFileName(rs.getString(3));     // file_name
-                file.setFileSize(rs.getLong(4));       // file_size
-                file.setFileHash(rs.getString(5));     // file_hash
-                file.setFilePath(rs.getString(6));     // file_path
-                file.setSharedDate(rs.getTimestamp(7)); // shared_date
-                file.setOwnerUsername(rs.getString(8)); // username
-                
-                files.add(file);
-            }
-            
-            System.out.println("✅ Found " + files.size() + " shared files");
-        }
-        
-    } catch (SQLException e) {
-        System.err.println("❌ Get all files error: " + e.getMessage());
-        e.printStackTrace();
-    }
-    
-    return files;
-}
-
-
-
     /**
      * Lấy file theo ID
      */
-    public FileInfo getFileById(int fileId) {
+     public FileInfo getFileById(int fileId) {
         String sql = "SELECT f.*, u.username as owner_username " +
                      "FROM files f " +
                      "JOIN users u ON f.user_id = u.user_id " +
@@ -349,60 +253,50 @@ public List<FileInfo> getAllSharedFiles() {
         
         return null;
     }
-     private String removeAccent(String s) {
-        if (s == null) return null;
-        String temp = Normalizer.normalize(s, Normalizer.Form.NFD);
-        return temp.replaceAll("\\p{M}", "");
-    }
+  /**
+     * ✅ FIXED: Lấy file theo tên (case-insensitive, normalized)
+     */
+    public FileInfo getFileByName(String fileName) {
+        if (fileName == null || fileName.isEmpty()) return null;
 
-/**
- * ✅ FIXED: Lấy file theo tên (case-insensitive, ASCII normalized)
- * 
- * So sánh theo LOWERCASE và bỏ khoảng trắng
- */
-public FileInfo getFileByName(String fileName) {
-    if (fileName == null || fileName.isEmpty()) return null;
+        String normalizedInput = fileName.toLowerCase()
+                                         .replace(" ", "")
+                                         .replace("_", "");
 
-    // Chuẩn hóa tên file: lowercase, bỏ khoảng trắng, bỏ underscore
-    String normalizedInput = fileName.toLowerCase()
-                                     .replace(" ", "")
-                                     .replace("_", "");
+        String sql = "SELECT f.*, u.username AS owner_username " +
+                     "FROM files f " +
+                     "JOIN users u ON f.user_id = u.user_id " +
+                     "WHERE REPLACE(REPLACE(LOWER(f.file_name), ' ', ''), '_', '') = ?";
 
-    String sql = "SELECT f.*, u.username AS owner_username " +
-                 "FROM files f " +
-                 "JOIN users u ON f.user_id = u.user_id " +
-                 "WHERE REPLACE(REPLACE(LOWER(f.file_name), ' ', ''), '_', '') = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-    try (Connection conn = DatabaseConnection.getConnection();
-         PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, normalizedInput);
+            ResultSet rs = pstmt.executeQuery();
 
-        pstmt.setString(1, normalizedInput);
-        ResultSet rs = pstmt.executeQuery();
-
-        if (rs.next()) {
-            FileInfo file = new FileInfo();
-            file.setFileId(rs.getInt("file_id"));
-            file.setUserId(rs.getInt("user_id"));
-            file.setFileName(rs.getString("file_name"));
-            file.setFileSize(rs.getLong("file_size"));
-            file.setFileHash(rs.getString("file_hash"));
-            file.setFilePath(rs.getString("file_path"));
-            file.setSharedDate(rs.getTimestamp("shared_date"));
-            file.setOwnerUsername(rs.getString("owner_username"));
+            if (rs.next()) {
+                FileInfo file = new FileInfo();
+                file.setFileId(rs.getInt("file_id"));
+                file.setUserId(rs.getInt("user_id"));
+                file.setFileName(rs.getString("file_name"));
+                file.setFileSize(rs.getLong("file_size"));
+                file.setFileHash(rs.getString("file_hash"));
+                file.setFilePath(rs.getString("file_path"));
+                file.setSharedDate(rs.getTimestamp("shared_date"));
+                file.setOwnerUsername(rs.getString("owner_username"));
+                
+                System.out.println("✅ Found file in DB: " + file.getFileName());
+                return file;
+            }
             
-            System.out.println("✅ Found file in DB: " + file.getFileName());
-            return file;
+            System.err.println("❌ File not found in DB for: " + fileName);
+
+        } catch (SQLException e) {
+            System.err.println("❌ Get file by name error: " + e.getMessage());
         }
-        
-        System.err.println("❌ File not found in DB for: " + fileName);
-        System.err.println("   Normalized input: " + normalizedInput);
 
-    } catch (SQLException e) {
-        System.err.println("❌ Get file by name error: " + e.getMessage());
+        return null;
     }
-
-    return null;
-}
 
 public List<FileInfo> getFilesByName(String fileName) {
     List<FileInfo> files = new ArrayList<>();
@@ -487,9 +381,8 @@ public FileInfo findBestMatch(String fileName) {
 
     return null;
 }
-
-    /**
-     * Tìm kiếm file theo tên
+ /**
+     * Tìm kiếm file theo keyword
      */
     public List<FileInfo> searchFilesByName(String keyword) {
         List<FileInfo> files = new ArrayList<>();
@@ -497,13 +390,13 @@ public FileInfo findBestMatch(String fileName) {
         String sql = "SELECT f.*, u.username as owner_username " +
                      "FROM files f " +
                      "JOIN users u ON f.user_id = u.user_id " +
-                     "WHERE LOWER(f.file_name) LIKE LOWER(?) "+
+                     "WHERE LOWER(f.file_name) LIKE LOWER(?) " +
                      "ORDER BY f.shared_date DESC";
         
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
-            pstmt.setString(1, "%" + keyword + "%"); // LIKE '%keyword%'
+            pstmt.setString(1, "%" + keyword + "%");
             ResultSet rs = pstmt.executeQuery();
             
             while (rs.next()) {
@@ -528,9 +421,8 @@ public FileInfo findBestMatch(String fileName) {
         
         return files;
     }
-    
-    /**
-     * Tìm file theo hash (để kiểm tra duplicate)
+  /**
+     * Tìm file theo hash
      */
     public FileInfo getFileByHash(String fileHash) {
         String sql = "SELECT f.*, u.username as owner_username " +
@@ -563,14 +455,10 @@ public FileInfo findBestMatch(String fileName) {
         
         return null;
     }
-    
     // ============================================
     // DELETE
     // ============================================
     
-    /**
-     * Xóa file
-     */
     public boolean deleteFile(int fileId) {
         String sql = "DELETE FROM files WHERE file_id = ?";
         
@@ -591,7 +479,6 @@ public FileInfo findBestMatch(String fileName) {
         
         return false;
     }
-    
     /**
      * Xóa tất cả file của user
      */
@@ -659,7 +546,6 @@ public FileInfo findBestMatch(String fileName) {
         } catch (SQLException e) {
             System.err.println("❌ Get total size error: " + e.getMessage());
         }
-        
         return 0;
     }
     

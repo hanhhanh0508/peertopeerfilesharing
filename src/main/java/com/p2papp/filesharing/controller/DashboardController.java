@@ -387,13 +387,12 @@ private String toSafeASCIIFileName(String fileName) {
             return;
         }
         
-        // Disable button during download
         btnDownload.setDisable(true);
         btnDownload.setText("Downloading...");
         
         new Thread(() -> {
             try {
-                // Lấy thông tin peer owner
+                // 1. Lấy thông tin peer owner
                 User owner = userDAO.getUserById(selected.getUserId());
                 if (owner == null) {
                     Platform.runLater(() -> {
@@ -404,7 +403,7 @@ private String toSafeASCIIFileName(String fileName) {
                     return;
                 }
                 
-                // Lấy thông tin peer (IP + Port)
+                // 2. Lấy thông tin peer (IP + Port)
                 Peer peer = peerDAO.getPeerByUserId(owner.getUserId());
                 if (peer == null || !peer.isOnline()) {
                     Platform.runLater(() -> {
@@ -419,13 +418,31 @@ private String toSafeASCIIFileName(String fileName) {
                 System.out.println("   File: " + selected.getFileName());
                 System.out.println("   Save to: " + saveLocation.getAbsolutePath());
                 
-                // ✅ DÙNG STATIC METHOD downloadFileDirect()
+                // 3. ✅ LOG download START vào DB
+                boolean downloadAdded = downloadDAO.addDownload(
+                    selected.getFileId(), 
+                    currentUser.getUserId()
+                );
+                
+                if (!downloadAdded) {
+                    System.err.println("⚠️  Failed to log download start");
+                }
+                
+                // 4. Download file
                 boolean success = PeerClient.downloadFileDirect(
                     peer.getIpAddress(), 
                     peer.getPort(), 
                     selected.getFileName(), 
                     saveLocation.getAbsolutePath()
                 );
+                
+                // 5. ✅ UPDATE download status
+                if (downloadAdded) {
+                    // Lấy download_id vừa tạo (có thể cải tiến bằng cách return từ addDownload)
+                    // Hiện tại update theo file_id + downloader_id
+                    String status = success ? "completed" : "failed";
+                    updateDownloadStatus(selected.getFileId(), currentUser.getUserId(), status);
+                }
                 
                 Platform.runLater(() -> {
                     btnDownload.setDisable(false);
@@ -436,10 +453,6 @@ private String toSafeASCIIFileName(String fileName) {
                                 "From: " + owner.getUsername() + " (" + peer.getAddress() + ")\n" +
                                 "File: " + selected.getFileName() + "\n" +
                                 "Saved to: " + saveLocation.getAbsolutePath());
-                        
-                        // Optional: Log download to database
-                        // DownloadDAO downloadDAO = new DownloadDAO();
-                        // downloadDAO.addDownload(selected.getFileId(), currentUser.getUserId());
                     } else {
                         showError("Download failed! Check console for details.");
                     }
@@ -454,6 +467,21 @@ private String toSafeASCIIFileName(String fileName) {
                 });
             }
         }).start();
+    }
+    /**
+     * ✅ NEW: Helper để update download status
+     */
+    private void updateDownloadStatus(int fileId, int downloaderId, String status) {
+        // Cách 1: Query download_id từ DB
+        // Cách 2: Thêm method updateDownloadStatusByFileAndUser trong DownloadDAO
+        
+        // Tạm thời: chỉ log ra console
+        System.out.println("📝 Download status: fileId=" + fileId + 
+                          ", downloaderId=" + downloaderId + 
+                          ", status=" + status);
+        
+        // TODO: Implement method trong DownloadDAO:
+        // downloadDAO.updateDownloadStatusByFileAndUser(fileId, downloaderId, status);
     }
     
     @FXML
