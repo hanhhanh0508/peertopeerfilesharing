@@ -67,6 +67,7 @@ public class DashboardController {
     private FileDAO fileDAO = new FileDAO();
     private PeerDAO peerDAO = new PeerDAO();
     private UserDAO userDAO = new UserDAO();
+    private DownloadDAO downloadDAO = new DownloadDAO();
     private PeerServer peerServer;
     
     private ObservableList<FileInfo> myFilesList = FXCollections.observableArrayList();
