@@ -56,7 +56,7 @@ public class PeerServer extends Thread {
     
     /**
      * Constructor
-     * @param port Port để lắng nghe
+     * @port Port để lắng nghe
      */
     public PeerServer(int port) {
         this.port = port;
@@ -209,7 +209,7 @@ public class PeerServer extends Thread {
                         handleListFiles();
                         break;
                     
-                    // ✅ THỐNG NHẤT: Chỉ dùng DOWNLOAD_REQUEST
+                    // Chỉ dùng DOWNLOAD_REQUEST
                     case "DOWNLOAD_REQUEST":
                         if (parts.length > 1) {
                             handleDownloadRequest(parts[1].trim());
@@ -260,7 +260,7 @@ public class PeerServer extends Thread {
             sendResponse(info);
         }
 /**
- * ✅ FIXED: DOWNLOAD_REQUEST handler - Xử lý tên file với nhiều encoding
+ * DOWNLOAD_REQUEST handler - Xử lý tên file với nhiều encoding
  */
 private void handleDownloadRequest(String fileName) {
     try {
@@ -429,63 +429,16 @@ private int levenshteinDistance(String s1, String s2) {
             }
             
             sendResponse(fileList.toString());
-        }
-        /**
-         * Gửi file binary qua socket (dùng cho DOWNLOAD_REQUEST)
-         */
- 
-        /**
-         * REQUEST_FILE - Gửi file cho peer
-         */
-     /*
- // HANDLE REQUEST FROM ANOTHER PEER
-private void handleRequestFile(String requestedFileName) {
-    System.out.println("DEBUG: requested fileName = '" + requestedFileName + "'");
-
-    try {
-        FileDAO fileDAO = new FileDAO();
-
-        // Chuẩn hóa tên file client gửi
-        String normalizedName = removeAccent(requestedFileName).toLowerCase().replace(" ", "");
-
-        // Lấy file từ DB dựa trên tên đã chuẩn hóa
-        FileInfo fileInfo = fileDAO.getFileByName(normalizedName);
-
-        if (fileInfo == null) {
-            sendResponse("ERROR:FILE_NOT_FOUND_IN_DB");
-            System.out.println("DEBUG: file not found in DB for '" + requestedFileName + "'");
-            return;
-        }
-
-        File file = new File(fileInfo.getFilePath());
-
-        if (!file.exists()) {
-            sendResponse("ERROR:FILE_NOT_ON_DISK");
-            System.out.println("DEBUG: file not found on disk: " + file.getAbsolutePath());
-            return;
-        }
-
-        sendResponse("FILE_INFO:" + file.getName() + ":" + file.length());
-        sendBinaryFile(file);
-        System.out.println("📤 SENT FILE → " + file.getAbsolutePath());
-
-    } catch (Exception e) {
-        sendResponse("ERROR:SEND_FAILED");
-        e.printStackTrace();
-    }
-}
-*/
+        } 
 // Helper: bỏ dấu tiếng Việt
 private String removeAccent(String s) {
     if (s == null) return null;
     String temp = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD);
     return temp.replaceAll("\\p{M}", "");
 }
-
-// Gửi dữ liệu nhị phân
-   /**
-         * Gửi file binary qua socket
-         */
+/**
+* Gửi file binary qua socket
+*/
         private void sendBinaryFile(File file) throws IOException {
             try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
                  BufferedOutputStream bos = new BufferedOutputStream(socket.getOutputStream())) {

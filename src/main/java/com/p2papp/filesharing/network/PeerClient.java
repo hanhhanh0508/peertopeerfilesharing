@@ -531,7 +531,7 @@ public boolean downloadFile(String fileName, String savePath) {
         System.out.println("║       PEER CLIENT TEST                 ║");
         System.out.println("╚════════════════════════════════════════╝\n");
         
-        // ⚠️ ĐỔI IP NÀY KHI TEST 2 MÁY THẬT!
+        // ️ ĐỔI IP NÀY KHI TEST 2 MÁY THẬT!
         // Localhost: "localhost" hoặc "127.0.0.1"
         // Máy khác: "192.168.1.10" (IP của máy chạy PeerServer)
         String serverIP = "localhost";
