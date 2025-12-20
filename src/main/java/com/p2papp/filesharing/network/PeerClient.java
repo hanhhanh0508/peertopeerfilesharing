@@ -398,7 +398,7 @@ public boolean downloadFile(String fileName, String savePath) {
             System.out.println("   From: " + host + ":" + port);
             System.out.println("   Save to: " + savePath);
             
-            // 1. Kết nối đến peer
+            // 1. Kết nối đến server
             socket = new Socket();
             socket.connect(new InetSocketAddress(host, port), 5000); // 5s timeout
             
