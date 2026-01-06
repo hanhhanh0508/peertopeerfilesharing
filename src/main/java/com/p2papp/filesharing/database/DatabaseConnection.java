@@ -26,8 +26,14 @@ public class DatabaseConnection {
      * Format: jdbc:mysql://[host]:[port]/[database]
      */
     // Trong DatabaseConnection.java
-    private static final String URL = 
+    /*private static final String URL = 
     "jdbc:mysql://10.141.117.107:3306/p2p_file_sharing" +
+    "?useUnicode=true" +
+    "&characterEncoding=UTF-8" +
+    "&serverTimezone=Asia/Ho_Chi_Minh";
+    */
+    private static final String URL = 
+    "jdbc:mysql://localhost:3306/p2p_file_sharing" +
     "?useUnicode=true" +
     "&characterEncoding=UTF-8" +
     "&serverTimezone=Asia/Ho_Chi_Minh";
